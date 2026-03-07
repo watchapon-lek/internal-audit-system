@@ -644,9 +644,15 @@ function App() {
     const isPass     = passPct >= 70;
 
     const generatedCars = [];
+    const existingCarCount = audits.reduce((acc, a) => acc + a.cars.length, 0);
+    let carSeq = existingCarCount;
     const updatedItems  = currentAudit.items.map(item => {
       if (item.score === 'NC' || item.score === 'OBS') {
         const carId = uuid();
+        carSeq++;
+        const year = new Date().getFullYear().toString().slice(-2);
+        const typeCode = item.score === 'NC' ? 'NC' : 'OBS';
+        const autoCarNumber = `CAR-${year}-${typeCode}-${String(carSeq).padStart(3,'0')}`;
         generatedCars.push({
           id: carId, auditId: currentAudit.id, itemId: item.id,
           question: item.question,
@@ -657,7 +663,9 @@ function App() {
           status: CARStatus.OPEN,
           issuedBy: currentAudit.auditorName,
           assignedTo: 'หัวหน้าแผนก ' + currentAudit.department,
-          carNumber: item.carNumber,
+          carNumber: item.carNumber || autoCarNumber,
+          carNumberBase: autoCarNumber,
+          seqNo: carSeq,
         });
         return { ...item, carId };
       }
@@ -682,8 +690,19 @@ function App() {
   const updateCARStatus = (auditId, carId, newStatus) => {
     setAudits(audits.map(audit => audit.id !== auditId ? audit : {
       ...audit,
-      cars: audit.cars.map(car => car.id !== carId ? car : {
-        ...car, status: newStatus, closedDate: newStatus === CARStatus.CLOSED ? new Date().toISOString() : car.closedDate
+      cars: audit.cars.map(car => {
+        if (car.id !== carId) return car;
+        const year = new Date().getFullYear().toString().slice(-2);
+        const typeCode = car.severity === CARSeverity.MAJOR ? 'NC' : 'OBS';
+        const statusCode = newStatus === CARStatus.CLOSED ? '-CLOSED' : newStatus === CARStatus.PENDING ? '-PENDING' : '';
+        const seq = car.seqNo ? String(car.seqNo).padStart(3,'0') : car.carNumberBase?.split('-').pop() || '000';
+        const updatedCarNumber = `CAR-${year}-${typeCode}-${seq}${statusCode}`;
+        return {
+          ...car,
+          status: newStatus,
+          carNumber: updatedCarNumber,
+          closedDate: newStatus === CARStatus.CLOSED ? new Date().toISOString() : car.closedDate
+        };
       })
     }));
   };
@@ -868,9 +887,9 @@ function App() {
             const stats = {
               total: filteredAudits.length,
               avgScore: filteredAudits.length ? (filteredAudits.reduce((acc,a) => acc+(a.totalScore/a.maxScore),0)/filteredAudits.length*100).toFixed(1) : 0,
-              pendingCars: filteredAudits.reduce((acc,a) => acc+a.cars.filter(c => c.status !== CARStatus.CLOSED).length, 0),
-              passed: filteredAudits.filter(a => a.isPass).length,
-              obs: filteredAudits.reduce((acc,a) => acc+a.items.filter(i => i.score==='OBS').length, 0)
+              cCount:  filteredAudits.reduce((acc,a) => acc+a.items.filter(i => i.score==='C').length, 0),
+              ncCount: filteredAudits.reduce((acc,a) => acc+a.items.filter(i => i.score==='NC').length, 0),
+              obs:     filteredAudits.reduce((acc,a) => acc+a.items.filter(i => i.score==='OBS').length, 0)
             };
             return (
               <div className="space-y-6 animate-in">
@@ -878,11 +897,11 @@ function App() {
                   {[
                     { label:'ตรวจทั้งหมด', value:stats.total, color:'' },
                     { label:'คะแนนเฉลี่ย', value:`${stats.avgScore}%`, color:'' },
-                    { label:'CAR ที่ค้างอยู่', value:stats.pendingCars, color:'text-rose-600' },
-                    { label:'ผ่านเกณฑ์', value:stats.passed, color:'text-emerald-600' },
-                    { label:'OBS', value:stats.obs, color:'text-amber-500' },
+                    { label:'C (ผ่าน)', value:stats.cCount, color:'text-sky-600' },
+                    { label:'NC (ไม่ผ่าน)', value:stats.ncCount, color:'text-rose-600' },
+                    { label:'OBS (ข้อสังเกต)', value:stats.obs, color:'text-amber-500' },
                   ].map(s => (
-                    <div key={s.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div key={s.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
                       <p className="text-slate-500 text-sm font-medium">{s.label}</p>
                       <h3 className={cn("text-3xl font-bold mt-1", s.color)}>{s.value}</h3>
                     </div>
