@@ -287,6 +287,8 @@ function App() {
   const [adminEmail, setAdminEmail]      = useState(() => ls.get('audit-admin-email','admin@example.com'));
   const [responseDept, setResponseDept]  = useState(null);
   const [respondingCar, setRespondingCar] = useState(null);
+  const [apYear, setApYear] = useState(new Date().getFullYear());
+  const [apView, setApView] = useState('calendar');
   const [carResponseData, setCarResponseData] = useState({ rootCause:'', correction:'', correctiveAction:'', preventiveAction:'', photo:'', signature:'' });
 
   // Persist helpers
@@ -1265,9 +1267,6 @@ function App() {
           {view === 'actionplan' && (() => {
             const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
             const today = new Date(); today.setHours(0,0,0,0);
-            const currentYear = today.getFullYear();
-            const [apYear, setApYear] = useState(currentYear);
-            const [apView, setApView] = useState('calendar'); // 'calendar' | 'dept'
 
             // Build month→plans map
             const plansByMonth = Array.from({length:12}, (_,mi) => {
