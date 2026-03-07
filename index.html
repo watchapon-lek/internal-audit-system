@@ -709,17 +709,17 @@ function App() {
 
   const submitCARResponse = () => {
     if (!respondingCar) return;
-    if (!carResponseData.rootCause || !carResponseData.correction || !carResponseData.signature) {
-      alert('กรุณากรอกข้อมูลให้ครบถ้วน รวมถึงลายเซ็น');
+    if (!carResponseData.rootCause || !carResponseData.correction) {
+      alert('กรุณากรอกสาเหตุและรายละเอียดการแก้ไขให้ครบถ้วน');
       return;
     }
     setAudits(audits.map(audit => audit.id !== respondingCar.auditId ? audit : {
       ...audit,
       cars: audit.cars.map(car => car.id !== respondingCar.id ? car : {
-        ...car, ...carResponseData, status: CARStatus.PENDING
+        ...car, ...carResponseData, responseDate: new Date().toISOString(), status: CARStatus.PENDING
       })
     }));
-    alert('ส่งข้อมูลการแก้ไขเรียบร้อยแล้ว');
+    showToast('✅ ส่งข้อมูลการแก้ไขเรียบร้อยแล้ว');
     setRespondingCar(null);
     setCarResponseData({ rootCause:'', correction:'', correctiveAction:'', preventiveAction:'', photo:'', signature:'' });
   };
@@ -2409,10 +2409,19 @@ function App() {
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase">ลายเซ็นผู้รับผิดชอบ</label>
-                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                                  <SignatureInput onSave={sig=>setCarResponseData({...carResponseData,signature:sig})} onClear={()=>setCarResponseData({...carResponseData,signature:''})} />
-                                </div>
+                                <label className="text-xs font-bold text-slate-500 uppercase">ลายเซ็นผู้รับผิดชอบ (ไม่บังคับ)</label>
+                                {carResponseData.signature ? (
+                                  <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                    <img src={carResponseData.signature} alt="sig" className="h-12 w-auto object-contain border-b border-slate-300" />
+                                    <button onClick={()=>setCarResponseData({...carResponseData,signature:''})} className="text-xs text-rose-500 font-bold">ลบลายเซ็น</button>
+                                  </div>
+                                ) : (
+                                  <label className="flex items-center justify-center gap-2 w-full border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-2xl py-5 cursor-pointer transition-all">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                                    <span className="text-sm font-bold text-slate-500">อัปโหลดลายเซ็น (ถ้ามี)</span>
+                                    <input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f){const r=new FileReader();r.onloadend=()=>setCarResponseData({...carResponseData,signature:r.result});r.readAsDataURL(f);}}} />
+                                  </label>
+                                )}
                               </div>
                               <div className="flex gap-3 pt-4">
                                 <button onClick={submitCARResponse} className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg active:scale-[0.98]">
@@ -2445,29 +2454,43 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={()=>setShowQrModal(null)} />
           <div className="relative bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden">
-            <div className="p-8 space-y-6">
+            <div className="p-8 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-2xl font-bold text-slate-900">QR Code สำหรับแผนก</h3>
                 <button onClick={()=>setShowQrModal(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
-                {DEPARTMENTS.map(dept => {
-                  const url = `${window.location.origin}${window.location.pathname}?dept=${encodeURIComponent(dept)}`;
-                  return (
-                    <div key={dept} className="bg-slate-50 p-4 rounded-3xl border border-slate-100 flex flex-col items-center space-y-3">
-                      <p className="font-bold text-slate-800">{dept}</p>
-                      <div className="bg-white p-3 rounded-2xl shadow-sm qr-container">
-                        <QRCode value={url} size={120} />
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-amber-500 flex-shrink-0 mt-0.5"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                <div className="text-xs text-amber-800">
+                  <p className="font-bold">⚠️ QR Code นี้ใช้งานได้เฉพาะบน device/browser เดียวกับที่บันทึกข้อมูล</p>
+                  <p className="mt-0.5 opacity-80">เนื่องจากระบบเก็บข้อมูลใน localStorage ของ browser — ให้ส่งลิงก์ให้แผนกเปิดบน browser นี้เครื่องนี้ หรือใช้ Copy Link แล้วส่งทาง Line/Email</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-2">
+                {(() => {
+                  const deptsWithCars = [...new Set(audits.flatMap(a => a.cars.filter(c=>c.status!==CARStatus.CLOSED).map(()=>a.department)))];
+                  const deptList = deptsWithCars.length > 0 ? deptsWithCars : DEPARTMENTS.slice(0, 6);
+                  return deptList.map(dept => {
+                    const url = `${window.location.origin}${window.location.pathname}?dept=${encodeURIComponent(dept)}`;
+                    const carCount = audits.flatMap(a=>a.cars).filter(c=>audits.find(a=>a.id===c.auditId)?.department===dept && c.status!==CARStatus.CLOSED).length;
+                    return (
+                      <div key={dept} className="bg-slate-50 p-4 rounded-3xl border border-slate-100 flex flex-col items-center space-y-2">
+                        <p className="font-bold text-slate-800 text-center text-sm">{dept}</p>
+                        {carCount > 0 && <span className="bg-rose-100 text-rose-600 text-[10px] font-black px-2 py-0.5 rounded-full">{carCount} CAR ค้างอยู่</span>}
+                        <div className="bg-white p-3 rounded-2xl shadow-sm">
+                          <QRCode value={url} size={110} />
+                        </div>
+                        <button onClick={()=>{ navigator.clipboard?.writeText(url).then(()=>showToast('✅ คัดลอกลิงก์แล้ว')).catch(()=>{ prompt('คัดลอก URL นี้:', url); }); }}
+                          className="flex items-center gap-1 text-[10px] font-bold text-brand-600 uppercase tracking-wider hover:underline">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                          คัดลอกลิงก์
+                        </button>
                       </div>
-                      <button onClick={()=>{ navigator.clipboard.writeText(url); alert('คัดลอกลิงก์เรียบร้อยแล้ว'); }}
-                        className="text-[10px] font-bold text-brand-600 uppercase tracking-wider hover:underline">
-                        คัดลอกลิงก์
-                      </button>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
