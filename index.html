@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Internal Audit System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.9.2/confetti.browser.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: 'var(--brand-50)',
+          100: 'var(--brand-100)',
+          200: 'var(--brand-200)',
+          300: 'var(--brand-300)',
+          500: 'var(--brand-500)',
+          600: 'var(--brand-600)',
+          700: 'var(--brand-700)',
+          900: 'var(--brand-900)',
+        }
+      },
+      fontFamily: { sans: ['Sarabun', 'sans-serif'] }
+    }
+  }
+}
+</script>
+<style>
+  :root {
+    --brand-50: #eef2ff; --brand-100: #e0e7ff; --brand-200: #c7d2fe;
+    --brand-300: #a5b4fc; --brand-500: #6366f1; --brand-600: #6366f1;
+    --brand-700: #4f46e5; --brand-900: #312e81;
+  }
+  [data-theme="emerald"] {
+    --brand-50: #ecfdf5; --brand-100: #d1fae5; --brand-200: #a7f3d0;
+    --brand-300: #6ee7b7; --brand-500: #10b981; --brand-600: #10b981;
+    --brand-700: #059669; --brand-900: #064e3b;
+  }
+  [data-theme="rose"] {
+    --brand-50: #fff1f2; --brand-100: #ffe4e6; --brand-200: #fecdd3;
+    --brand-300: #fda4af; --brand-500: #f43f5e; --brand-600: #f43f5e;
+    --brand-700: #e11d48; --brand-900: #881337;
+  }
+  [data-theme="amber"] {
+    --brand-50: #fffbeb; --brand-100: #fef3c7; --brand-200: #fde68a;
+    --brand-300: #fcd34d; --brand-500: #f59e0b; --brand-600: #f59e0b;
+    --brand-700: #d97706; --brand-900: #78350f;
+  }
+  [data-theme="sky"] {
+    --brand-50: #f0f9ff; --brand-100: #e0f2fe; --brand-200: #bae6fd;
+    --brand-300: #7dd3fc; --brand-500: #0ea5e9; --brand-600: #0ea5e9;
+    --brand-700: #0284c7; --brand-900: #0c4a6e;
+  }
+  [data-theme="violet"] {
+    --brand-50: #f5f3ff; --brand-100: #ede9fe; --brand-200: #ddd6fe;
+    --brand-300: #c4b5fd; --brand-500: #8b5cf6; --brand-600: #8b5cf6;
+    --brand-700: #7c3aed; --brand-900: #4c1d95;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Sarabun', sans-serif; }
+  canvas { touch-action: none; }
+  .sig-canvas { border: 2px dashed #e2e8f0; border-radius: 16px; background: #f8fafc; cursor: crosshair; width: 100%; height: 160px; }
+  .animate-in { animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .scrollbar-hide::-webkit-scrollbar { display:none; }
+  select, input, textarea { color: #1e293b; }
+  .qr-container canvas { display: block; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+const uuid = () => crypto.randomUUID();
+const cn = (...c) => c.filter(Boolean).join(' ');
+const ls = { get: (k,d) => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):d; } catch { return d; }}, set: (k,v) => localStorage.setItem(k, JSON.stringify(v)) };
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+const THEMES = [
+  { id:'indigo',  name:'Indigo',  color:'#6366f1' },
+  { id:'emerald', name:'Emerald', color:'#10b981' },
+  { id:'rose',    name:'Rose',    color:'#f43f5e' },
+  { id:'amber',   name:'Amber',   color:'#f59e0b' },
+  { id:'sky',     name:'Sky',     color:'#0ea5e9' },
+  { id:'violet',  name:'Violet',  color:'#8b5cf6' },
+];
+
+const DEPARTMENTS = [
+  'การผลิต (Production)', 'ควบคุมคุณภาพ (QC)', 'ประกันคุณภาพ (QA)',
+  'คลังสินค้า (Warehouse)', 'วิจัยและพัฒนา (R&D)', 'บรรจุภัณฑ์ (Packaging)',
+  'จัดซื้อ (Purchasing)', 'ทรัพยากรบุคคล (HR)', 'วิศวกรรม (Engineering)', 'ความปลอดภัย (Safety)',
+];
+
+const AUDIT_STANDARDS = ['GMP', 'ISO 22716', 'ISO 9001', 'HACCP', 'HALAL', 'NSF', 'FDA', 'OSHA'];
+
+const DEPARTMENT_CHECKLISTS = {
+  'การผลิต (Production)': [
+    'มีการควบคุมกระบวนการผลิตตาม SOP ที่กำหนดไว้',
+    'อุปกรณ์การผลิตได้รับการสอบเทียบและบำรุงรักษาตามกำหนด',
+    'พนักงานผ่านการฝึกอบรมและมีใบรับรองที่ยังไม่หมดอายุ',
+    'สภาพแวดล้อมการผลิตได้มาตรฐาน GMP (อุณหภูมิ ความชื้น ฯลฯ)',
+    'มีการบันทึก Batch Record อย่างครบถ้วนและถูกต้อง',
+    'ระบบป้องกันการปนเปื้อนข้ามสินค้า (Cross-contamination) ทำงานได้ดี',
+    'วัตถุดิบและผลิตภัณฑ์ระหว่างผลิตมีการระบุชัดเจน',
+    'การจัดการของเสียและวัสดุ reject เป็นไปตามขั้นตอน',
+  ],
+  'ควบคุมคุณภาพ (QC)': [
+    'ห้องปฏิบัติการได้รับการรับรอง ISO/IEC 17025 หรือเทียบเท่า',
+    'เครื่องมือทดสอบทุกชิ้นมีใบสอบเทียบที่เป็นปัจจุบัน',
+    'มีการเก็บตัวอย่างอ้างอิง (Retention Sample) ตามระยะเวลากำหนด',
+    'ขั้นตอนการทดสอบมีเอกสาร SOP และปฏิบัติตามอย่างสม่ำเสมอ',
+    'ผลการทดสอบทั้งหมดถูกบันทึกและสามารถตรวจสอบย้อนหลังได้',
+    'มีระบบจัดการผลทดสอบที่ไม่ผ่านเกณฑ์ (OOS Investigation)',
+    'สารเคมีและรีเอเจนต์มีการจัดเก็บและจัดการอย่างถูกต้อง',
+  ],
+  'ประกันคุณภาพ (QA)': [
+    'ระบบเอกสารเป็นไปตามมาตรฐาน GMP / ISO 22716',
+    'มีการตรวจสอบและอนุมัติเอกสารก่อนนำไปใช้',
+    'การจัดการ Change Control เป็นไปตามขั้นตอนที่กำหนด',
+    'ระบบ CAPA ทำงานมีประสิทธิภาพและปิดภายในกำหนด',
+    'มีการดำเนินการตาม Risk Assessment สำหรับกระบวนการสำคัญ',
+    'Customer Complaint ทุกใบได้รับการสืบสวนและปิดตามกำหนด',
+    'Supplier Qualification Program ดำเนินการครบถ้วน',
+  ],
+  'คลังสินค้า (Warehouse)': [
+    'ระบบ FEFO/FIFO ถูกนำมาใช้อย่างเคร่งครัด',
+    'สภาพแวดล้อมการจัดเก็บเหมาะสมกับประเภทสินค้า',
+    'การรับและจ่ายสินค้ามีเอกสารกำกับครบถ้วน',
+    'พื้นที่กักกัน (Quarantine Area) มีการจัดการอย่างชัดเจน',
+    'ระบบ WMS / Inventory ทำงานถูกต้องและเป็นปัจจุบัน',
+    'การขนส่งสินค้าเป็นไปตามข้อกำหนด (อุณหภูมิ การบรรจุ)',
+  ],
+  'วิจัยและพัฒนา (R&D)': [
+    'สูตรผลิตภัณฑ์มีเอกสารและการอนุมัติก่อนการผลิต',
+    'มีการทดสอบความเสถียร (Stability Testing) ตามมาตรฐาน',
+    'การทดสอบความปลอดภัย (Safety Testing) ครบถ้วน',
+    'เอกสาร Formulation Record เป็นปัจจุบัน',
+    'มีการทดสอบประสิทธิภาพ (Efficacy Testing) ที่น่าเชื่อถือ',
+  ],
+  'บรรจุภัณฑ์ (Packaging)': [
+    'บรรจุภัณฑ์ทุกชนิดผ่านการทดสอบตามมาตรฐาน',
+    'การพิมพ์ฉลากถูกต้องตามกฎหมายและมาตรฐาน',
+    'มีการตรวจสอบ Artwork ก่อนการผลิตทุกครั้ง',
+    'วัสดุบรรจุภัณฑ์มี Certificate of Analysis (CoA)',
+    'กระบวนการบรรจุเป็นไปตาม SOP ที่กำหนด',
+  ],
+  'จัดซื้อ (Purchasing)': [
+    'มีรายการ Approved Supplier List ที่เป็นปัจจุบัน',
+    'การประเมิน Supplier ทำตามกำหนดระยะเวลา',
+    'ใบสั่งซื้อทุกใบผ่านการอนุมัติตามขั้นตอน',
+    'มีการตรวจรับสินค้าและเอกสารครบถ้วน',
+    'Contract Review ทำก่อนการลงนามสัญญา',
+  ],
+  'ทรัพยากรบุคคล (HR)': [
+    'พนักงานทุกคนผ่านการอบรม GMP เบื้องต้น',
+    'บันทึกการฝึกอบรมครบถ้วนและเป็นปัจจุบัน',
+    'ขั้นตอนการตรวจสุขภาพพนักงานดำเนินการตามกำหนด',
+    'มีการประเมินผลการปฏิบัติงานตามระยะเวลา',
+    'Personal Hygiene Policy ถูกปฏิบัติตามอย่างเคร่งครัด',
+  ],
+  'วิศวกรรม (Engineering)': [
+    'แผนการบำรุงรักษาเชิงป้องกัน (PM) ดำเนินการตามกำหนด',
+    'การสอบเทียบเครื่องมือวัดทุกชนิดเป็นปัจจุบัน',
+    'ระบบ Utility (น้ำ ไฟ ลม) มีการตรวจสอบสม่ำเสมอ',
+    'เอกสาร Engineering Change Control ครบถ้วน',
+    'Work Order / Maintenance Log บันทึกครบถ้วน',
+  ],
+  'ความปลอดภัย (Safety)': [
+    'อุปกรณ์ป้องกันส่วนบุคคล (PPE) พร้อมใช้และครบจำนวน',
+    'การฝึกซ้อมดับเพลิงและอพยพฉุกเฉินทำตามกำหนด',
+    'สารเคมีอันตรายมีการจัดเก็บและ SDS ครบถ้วน',
+    'ป้ายเตือนและสัญลักษณ์ความปลอดภัยครบถ้วนชัดเจน',
+    'การรายงานอุบัติเหตุและ Near Miss ดำเนินการถูกต้อง',
+    'ระบบไฟฉุกเฉินและ Exit Sign พร้อมใช้งาน',
+  ],
+};
+
+const CARSeverity = { MAJOR:'major', MINOR:'minor', CRITICAL:'critical' };
+const CARStatus   = { OPEN:'open', PENDING:'pending', CLOSED:'closed' };
+
+// ── Signature Pad ─────────────────────────────────────────────────────────────
+function SignatureInput({ onSave, onClear }) {
+  const canvasRef = useRef(null);
+  const drawing   = useRef(false);
+  const lastPos   = useRef({ x:0, y:0 });
+
+  const getPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const src  = e.touches ? e.touches[0] : e;
+    return { x:(src.clientX - rect.left)*(canvas.width/rect.width), y:(src.clientY - rect.top)*(canvas.height/rect.height) };
+  };
+
+  const startDraw = (e) => {
+    e.preventDefault();
+    drawing.current = true;
+    lastPos.current = getPos(e, canvasRef.current);
+  };
+  const draw = (e) => {
+    if (!drawing.current) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    const ctx    = canvas.getContext('2d');
+    const pos    = getPos(e, canvas);
+    ctx.beginPath();
+    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    lastPos.current = pos;
+  };
+  const endDraw = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    onSave(canvasRef.current.toDataURL());
+  };
+  const clear = () => {
+    const canvas = canvasRef.current;
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    onClear();
+  };
+
+  return (
+    <div className="space-y-2">
+      <canvas ref={canvasRef} width={600} height={160}
+        className="sig-canvas"
+        onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+        onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
+      />
+      <button onClick={clear} className="text-xs text-slate-400 hover:text-rose-500 transition-colors font-medium">
+        ล้างลายเซ็น
+      </button>
+    </div>
+  );
+}
+
+// ── QR Code component ─────────────────────────────────────────────────────────
+function QRCode({ value, size = 120 }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (canvasRef.current && window.QRCode) {
+      window.QRCode.toCanvas(canvasRef.current, value, { width: size, margin: 1 }, () => {});
+    }
+  }, [value, size]);
+  return <canvas ref={canvasRef} className="rounded-lg" />;
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const [theme, setTheme]         = useState(() => ls.get('audit-theme', 'indigo'));
+  const [view,  setView]          = useState('dashboard');
+  const [isEditing, setIsEditing] = useState(false);
+  const [audits,   setAuditsRaw]  = useState(() => ls.get('audit-audits', []));
+  const [plans,    setPlansRaw]   = useState(() => ls.get('audit-plans',  []));
+  const [auditors, setAuditorsRaw]= useState(() => ls.get('audit-auditors',[]));
+  const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('audit-auth') === 'true');
+  const [pinInput, setPinInput]   = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [currentAudit,  setCurrentAudit]   = useState({ items:[], auditorName:'', department:'' });
+  const [selectedReport,setSelectedReport] = useState(null);
+  const [editingItemId, setEditingItemId]  = useState(null);
+  const [filterRound,   setFilterRound]    = useState('all');
+  const [showAuditorManager, setShowAuditorManager] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [showQrModal, setShowQrModal]   = useState(null);
+  const [newAuditorName, setNewAuditorName] = useState('');
+  const [newPlanDept, setNewPlanDept]   = useState('');
+  const [newPlanDate, setNewPlanDate]   = useState('');
+  const [newPlanAuditorId, setNewPlanAuditorId] = useState('');
+  const [newPlanRound,  setNewPlanRound]  = useState(1);
+  const [adminEmail, setAdminEmail]      = useState(() => ls.get('audit-admin-email','admin@example.com'));
+  const [responseDept, setResponseDept]  = useState(null);
+  const [respondingCar, setRespondingCar] = useState(null);
+  const [carResponseData, setCarResponseData] = useState({ rootCause:'', correction:'', correctiveAction:'', preventiveAction:'', photo:'', signature:'' });
+
+  // Persist helpers
+  const setAudits   = (v) => { setAuditorsRaw; setAuditsRaw(v);   ls.set('audit-audits',   v); };
+  const setPlans    = (v) => { setPlansRaw(v);    ls.set('audit-plans',    v); };
+  const setAuditors = (v) => { setAuditorsRaw(v); ls.set('audit-auditors', v); };
+
+  const filteredAudits = audits.filter(a => filterRound === 'all' || a.round === filterRound);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme === 'indigo' ? '' : theme);
+    ls.set('audit-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dept   = params.get('dept');
+    if (dept) { setResponseDept(dept); setView('respond'); }
+  }, []);
+
+  const handleLogin = (e) => {
+    e?.preventDefault();
+    const storedPin = ls.get('audit-pin', '123456');
+    if (pinInput === storedPin) {
+      setIsAuthenticated(true);
+      sessionStorage.setItem('audit-auth','true');
+      setLoginError('');
+      setPinInput('');
+    } else {
+      setLoginError('PIN ไม่ถูกต้อง (default: 123456)');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('audit-auth');
+    setView('dashboard');
+  };
+
+  const updateSecuritySettings = ({ pin, adminEmail: email }) => {
+    if (pin) { ls.set('audit-pin', pin); alert('เปลี่ยน PIN เรียบร้อยแล้ว'); }
+    if (email) { ls.set('audit-admin-email', email); setAdminEmail(email); alert('บันทึกอีเมลเรียบร้อยแล้ว'); }
+  };
+
+  const addAuditor    = (name) => { if (!name.trim()) return; setAuditors([...auditors, { id:uuid(), name:name.trim() }]); };
+  const removeAuditor = (id)   => setAuditors(auditors.filter(a => a.id !== id));
+  const addPlan       = (plan) => setPlans([...plans, { ...plan, id:uuid() }]);
+  const removePlan    = (id)   => setPlans(plans.filter(p => p.id !== id));
+
+  const checkPlanStatus = (plan) => {
+    const actual = audits.find(a => a.department === plan.department && a.round === plan.round &&
+      new Date(a.timestamp).toLocaleDateString() === new Date(plan.plannedDate).toLocaleDateString());
+    if (actual) return { status:'completed', date: actual.timestamp };
+    const today   = new Date(); today.setHours(0,0,0,0);
+    const planned = new Date(plan.plannedDate); planned.setHours(0,0,0,0);
+    return planned < today ? { status:'overdue' } : { status:'planned' };
+  };
+
+  const startNewAudit = () => {
+    setIsEditing(false);
+    setCurrentAudit({ id:uuid(), timestamp:new Date().toISOString(), auditorName:'', department:'', items:[], signature:'', round:1 });
+    setView('form');
+  };
+
+  const editAudit = (audit) => {
+    setIsEditing(true);
+    setCurrentAudit({ ...audit });
+    setView('form');
+  };
+
+  const handleDepartmentChange = (dept) => {
+    const questions = DEPARTMENT_CHECKLISTS[dept] || [];
+    const items = questions.map(q => ({ id:uuid(), question:q, score:'', comment:'', standards:[], carNumber:'' }));
+    setCurrentAudit(prev => ({ ...prev, department:dept, items }));
+  };
+
+  const updateItem = (id, updates) =>
+    setCurrentAudit(prev => ({ ...prev, items: prev.items.map(i => i.id === id ? { ...i, ...updates } : i) }));
+
+  const addCustomItem = () =>
+    setCurrentAudit(prev => ({ ...prev, items: [...prev.items, { id:uuid(), question:'', score:'', comment:'', standards:[], carNumber:'', isCustom:true }] }));
+
+  const removeCustomItem = (id) =>
+    setCurrentAudit(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) }));
+
+  const handlePhotoUpload = (id, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => updateItem(id, { photo: reader.result });
+    reader.readAsDataURL(file);
+  };
+
+  const submitAudit = () => {
+    if (!currentAudit.auditorName || !currentAudit.department || !currentAudit.signature) {
+      alert('กรุณากรอกข้อมูลให้ครบถ้วน รวมถึงลายเซ็น');
+      return;
+    }
+    if (currentAudit.items.some(i => i.isCustom && !i.question)) {
+      alert('กรุณาระบุหัวข้อสำหรับรายการที่เพิ่มมาใหม่');
+      return;
+    }
+    if (currentAudit.items.some(i => !i.score)) {
+      alert('กรุณาประเมินหัวข้อการตรวจให้ครบทุกข้อ');
+      return;
+    }
+
+    const scoreMap = { C:1, NC:0, OBS:1 };
+    const totalScore = currentAudit.items.reduce((s, i) => s + (scoreMap[i.score] || 0), 0);
+    const maxScore   = currentAudit.items.length;
+    const passPct    = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
+    const isPass     = passPct >= 70;
+
+    const generatedCars = [];
+    const updatedItems  = currentAudit.items.map(item => {
+      if (item.score === 'NC' || item.score === 'OBS') {
+        const carId = uuid();
+        generatedCars.push({
+          id: carId, auditId: currentAudit.id, itemId: item.id,
+          question: item.question,
+          finding: item.comment || (item.score === 'NC' ? 'พบข้อบกพร่อง (Non-Compliant)' : 'ข้อสังเกตจากการตรวจ (Observation)'),
+          severity: item.score === 'NC' ? CARSeverity.MAJOR : CARSeverity.MINOR,
+          issuedDate: new Date().toISOString(),
+          dueDate: new Date(Date.now() + 7*86400000).toISOString(),
+          status: CARStatus.OPEN,
+          issuedBy: currentAudit.auditorName,
+          assignedTo: 'หัวหน้าแผนก ' + currentAudit.department,
+          carNumber: item.carNumber,
+        });
+        return { ...item, carId };
+      }
+      return item;
+    });
+
+    const finalAudit = { ...currentAudit, items:updatedItems, totalScore, maxScore, passPercentage:passPct, isPass, cars:generatedCars, round:currentAudit.round||1 };
+    const newAudits  = isEditing ? audits.map(a => a.id === finalAudit.id ? finalAudit : a) : [finalAudit, ...audits];
+    setAudits(newAudits);
+    confetti({ particleCount:100, spread:70, origin:{ y:0.6 } });
+    setView('dashboard');
+    setIsEditing(false);
+  };
+
+  const deleteAudit = (id) => {
+    setAudits(audits.filter(a => a.id !== id));
+    setDeleteConfirmId(null);
+    if (view === 'report') setView('dashboard');
+  };
+
+  const updateCARStatus = (auditId, carId, newStatus) => {
+    setAudits(audits.map(audit => audit.id !== auditId ? audit : {
+      ...audit,
+      cars: audit.cars.map(car => car.id !== carId ? car : {
+        ...car, status: newStatus, closedDate: newStatus === CARStatus.CLOSED ? new Date().toISOString() : car.closedDate
+      })
+    }));
+  };
+
+  const submitCARResponse = () => {
+    if (!respondingCar) return;
+    if (!carResponseData.rootCause || !carResponseData.correction || !carResponseData.signature) {
+      alert('กรุณากรอกข้อมูลให้ครบถ้วน รวมถึงลายเซ็น');
+      return;
+    }
+    setAudits(audits.map(audit => audit.id !== respondingCar.auditId ? audit : {
+      ...audit,
+      cars: audit.cars.map(car => car.id !== respondingCar.id ? car : {
+        ...car, ...carResponseData, status: CARStatus.PENDING
+      })
+    }));
+    alert('ส่งข้อมูลการแก้ไขเรียบร้อยแล้ว');
+    setRespondingCar(null);
+    setCarResponseData({ rootCause:'', correction:'', correctiveAction:'', preventiveAction:'', photo:'', signature:'' });
+  };
+
+  const getDeptStats = () => {
+    const stats = {};
+    filteredAudits.forEach(a => {
+      if (!stats[a.department]) stats[a.department] = { total:0, passed:0, avgScore:0 };
+      stats[a.department].total++;
+      if (a.isPass) stats[a.department].passed++;
+      stats[a.department].avgScore += a.passPercentage;
+    });
+    return Object.entries(stats).map(([name,s]) => ({ name, ...s, avgScore: s.avgScore/s.total })).sort((a,b) => b.avgScore - a.avgScore);
+  };
+
+  const generateExcel = () => {
+    const data = filteredAudits.map(a => ({
+      'Audit ID': a.id.slice(0,8), 'รอบการตรวจ': `ครั้งที่ ${a.round}`,
+      'วันที่': new Date(a.timestamp).toLocaleDateString(),
+      'เวลา': new Date(a.timestamp).toLocaleTimeString(),
+      'แผนก': a.department, 'ผู้ตรวจ': a.auditorName,
+      'คะแนนรวม': a.totalScore, 'คะแนนเต็ม': a.maxScore,
+      'ร้อยละ': a.passPercentage.toFixed(1)+'%',
+      'ผลการตรวจ': a.isPass ? 'ผ่าน (PASS)' : 'ไม่ผ่าน (FAIL)',
+      'จำนวน CAR': a.cars.length
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Audit Summary");
+    const allCars = filteredAudits.flatMap(a => a.cars.map(c => ({
+      'CAR ID': c.id.slice(0,8), 'Audit ID': c.auditId.slice(0,8),
+      'แผนก': a.department, 'หัวข้อ': c.question, 'สิ่งที่พบ': c.finding,
+      'ความรุนแรง': c.severity, 'สถานะ': c.status, 'CAR No.': c.carNumber||'-',
+      'วันที่ออก': new Date(c.issuedDate).toLocaleDateString(),
+      'กำหนดเสร็จ': new Date(c.dueDate).toLocaleDateString(), 'ผู้รับผิดชอบ': c.assignedTo
+    })));
+    if (allCars.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allCars), "CAR List");
+    XLSX.writeFile(wb, `Internal_Audit_Report_${Date.now()}.xlsx`);
+  };
+
+  const generatePDF = (report) => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFontSize(22); doc.setTextColor(79,70,229);
+    doc.text("Internal Audit System Report", 105, 20, { align:'center' });
+    doc.setFontSize(10); doc.setTextColor(100,116,139);
+    doc.text("Cosmetic Factory Internal Audit System", 105, 27, { align:'center' });
+    doc.setDrawColor(226,232,240); doc.line(20,35,190,35);
+    doc.setFontSize(12); doc.setTextColor(30,41,59);
+    doc.text(`Auditor: ${report.auditorName}`, 20, 45);
+    doc.text(`Department: ${report.department}`, 20, 52);
+    doc.text(`Date: ${new Date(report.timestamp).toLocaleString()}`, 20, 59);
+    const sc = report.isPass ? [16,185,129] : [244,63,94];
+    doc.setTextColor(sc[0],sc[1],sc[2]);
+    doc.text(`Status: ${report.isPass?'PASS':'FAIL'} (${report.passPercentage.toFixed(1)}%)`, 20, 66);
+    doc.setTextColor(30,41,59);
+    const tableData = report.items.map((item,idx) => [
+      (idx+1).toString(),
+      item.question + (item.standards?.length > 0 ? `\n[${item.standards.join(', ')}]` : '') + (item.carNumber ? `\n(CAR No.: ${item.carNumber})` : ''),
+      item.score, item.comment||'-'
+    ]);
+    doc.autoTable({ startY:75, head:[['#','Question & Standards','Result','Comment']], body:tableData, headStyles:{fillColor:[79,70,229]}, alternateRowStyles:{fillColor:[248,250,252]} });
+    let finalY = doc.lastAutoTable.finalY || 150;
+    if (report.cars.length > 0) {
+      if (finalY > 240) { doc.addPage(); finalY = 20; }
+      doc.setFontSize(14); doc.text("Corrective Action Requests (CAR)", 20, finalY+15);
+      doc.autoTable({ startY:finalY+20, head:[['Finding','Severity','Assigned To','Due Date']],
+        body: report.cars.map(c => [c.question, c.severity, c.assignedTo, new Date(c.dueDate).toLocaleDateString()]),
+        headStyles:{fillColor:[244,63,94]} });
+      finalY = doc.lastAutoTable.finalY;
+    }
+    if (finalY > 250) { doc.addPage(); finalY = 20; }
+    doc.text("Signature:", 20, finalY+20);
+    if (report.signature) doc.addImage(report.signature, 'PNG', 20, finalY+25, 50, 20);
+    doc.text(report.auditorName, 20, finalY+50);
+    doc.save(`Audit_${report.department}_${Date.now()}.pdf`);
+  };
+
+  // ── RENDER ───────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+
+      {/* HEADER */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </div>
+            <div>
+              <h1 className="font-bold text-lg leading-tight">Internal Audit System</h1>
+              <p className="text-xs text-slate-500">Cosmetic Factory System</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {isAuthenticated && (
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                {THEMES.map(t => (
+                  <button key={t.id} onClick={() => setTheme(t.id)}
+                    className={cn("w-6 h-6 rounded-full transition-all border-2", theme === t.id ? "border-white scale-110 shadow-sm" : "border-transparent opacity-40 hover:opacity-100")}
+                    style={{ backgroundColor: t.color }} title={t.name} />
+                ))}
+              </div>
+            )}
+            {isAuthenticated && view === 'dashboard' && (
+              <div className="flex items-center gap-2">
+                <button onClick={() => setView('planning')} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all active:scale-95 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                  แผนการตรวจ
+                </button>
+                <button onClick={() => setView('settings')} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 p-2 rounded-lg transition-all active:scale-95 shadow-sm" title="ตั้งค่า">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                </button>
+                <button onClick={handleLogout} className="bg-white border border-slate-200 hover:bg-slate-50 text-rose-600 p-2 rounded-lg transition-all active:scale-95 shadow-sm" title="ออกจากระบบ">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+                </button>
+                <button onClick={startNewAudit} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all active:scale-95 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                  ตรวจหน้างานใหม่
+                </button>
+              </div>
+            )}
+            {isAuthenticated && view !== 'dashboard' && (
+              <button onClick={() => setView('dashboard')} className="text-slate-500 hover:text-slate-700 p-2 rounded-lg transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><line x1="19" x2="5" y1="12" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        {!isAuthenticated && view !== 'respond' ? (
+          /* ── LOGIN ── */
+          <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8">
+            <div className="w-20 h-20 bg-brand-600 rounded-[2rem] flex items-center justify-center text-white shadow-2xl">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </div>
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl font-black text-slate-900">เข้าสู่ระบบ</h2>
+              <p className="text-slate-500">กรุณาใส่ PIN เพื่อเข้าถึงข้อมูลระบบ</p>
+            </div>
+            <form onSubmit={handleLogin} className="w-full max-w-xs space-y-6">
+              <div className="relative">
+                <input type="password" maxLength={10} placeholder="ใส่ PIN ของคุณ..."
+                  value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g,''))}
+                  className="w-full bg-white border-2 border-slate-200 rounded-2xl px-6 py-4 text-center text-2xl font-black tracking-[1em] outline-none focus:border-brand-500 transition-all shadow-sm"
+                  autoFocus />
+                {loginError && <p className="absolute -bottom-6 left-0 right-0 text-center text-xs font-bold text-rose-500">{loginError}</p>}
+              </div>
+              <button type="submit" className="w-full bg-brand-600 hover:bg-brand-700 text-white py-4 rounded-2xl font-bold text-lg shadow-xl transition-all active:scale-[0.98]">
+                ยืนยัน PIN
+              </button>
+              <p className="text-center text-xs text-slate-400">PIN เริ่มต้น: <span className="font-bold text-slate-600">123456</span></p>
+            </form>
+          </div>
+        ) : (
+          <>
+          {/* ── DASHBOARD ── */}
+          {view === 'dashboard' && (() => {
+            const stats = {
+              total: filteredAudits.length,
+              avgScore: filteredAudits.length ? (filteredAudits.reduce((acc,a) => acc+(a.totalScore/a.maxScore),0)/filteredAudits.length*100).toFixed(1) : 0,
+              pendingCars: filteredAudits.reduce((acc,a) => acc+a.cars.filter(c => c.status !== CARStatus.CLOSED).length, 0),
+              passed: filteredAudits.filter(a => a.isPass).length
+            };
+            return (
+              <div className="space-y-6 animate-in">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {[
+                    { label:'ตรวจทั้งหมด', value:stats.total, color:'' },
+                    { label:'คะแนนเฉลี่ย', value:`${stats.avgScore}%`, color:'' },
+                    { label:'CAR ที่ค้างอยู่', value:stats.pendingCars, color:'text-rose-600' },
+                    { label:'ผ่านเกณฑ์', value:stats.passed, color:'text-emerald-600' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                      <p className="text-slate-500 text-sm font-medium">{s.label}</p>
+                      <h3 className={cn("text-3xl font-bold mt-1", s.color)}>{s.value}</h3>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-brand-50 border border-brand-100 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center text-brand-600">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-brand-900 text-sm">ความถี่การตรวจภายใน (Internal Audit)</h4>
+                      <p className="text-xs text-brand-700">กำหนดการตรวจ: 2 ครั้งต่อปี (ทุก 6 เดือน)</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="bg-white border border-brand-200 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">รอบ:</span>
+                      <select value={filterRound} onChange={e => setFilterRound(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                        className="text-xs font-bold text-brand-600 outline-none bg-transparent cursor-pointer">
+                        <option value="all">ทั้งหมด</option>
+                        <option value={1}>ครั้งที่ 1</option>
+                        <option value={2}>ครั้งที่ 2</option>
+                      </select>
+                    </div>
+                    <button onClick={generateExcel} className="bg-white text-brand-600 border border-brand-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-brand-50 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="3" y2="21"/></svg>
+                      Export Excel
+                    </button>
+                    <button onClick={() => setView('cars')} className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-brand-700 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                      ดู CAR ทั้งหมด
+                    </button>
+                  </div>
+                </div>
+
+                {/* Dept Stats */}
+                <div className="space-y-4">
+                  <h2 className="font-bold text-xl flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className="text-brand-600"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                    สรุปรายแผนก (Company-wide)
+                  </h2>
+                  {audits.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {getDeptStats().map(stat => (
+                        <div key={stat.name} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-sm">{stat.name}</h4>
+                            <p className="text-xs text-slate-500">ตรวจแล้ว {stat.total} ครั้ง | ผ่าน {stat.passed} ครั้ง</p>
+                          </div>
+                          <div className="text-right">
+                            <p className={cn("text-lg font-black", stat.avgScore >= 70 ? "text-emerald-600" : "text-rose-600")}>{stat.avgScore.toFixed(1)}%</p>
+                            <div className="w-24 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                              <div className={cn("h-full transition-all", stat.avgScore>=70?"bg-emerald-500":"bg-rose-500")} style={{ width:`${stat.avgScore}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-slate-400 text-sm italic px-2">ยังไม่มีข้อมูลสรุปรายแผนก</p>}
+                </div>
+
+                {/* History */}
+                <div className="space-y-4">
+                  <h2 className="font-bold text-xl flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className="text-brand-600"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+                    ประวัติการตรวจล่าสุด
+                  </h2>
+                  {filteredAudits.length === 0 ? (
+                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center">
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                      </div>
+                      <h3 className="font-bold text-lg text-slate-700">ไม่พบประวัติการตรวจ</h3>
+                      <p className="text-slate-500 mt-1">{filterRound==='all'?'เริ่มการตรวจหน้างานครั้งแรกของคุณได้เลย':`ยังไม่มีการตรวจในรอบที่ ${filterRound}`}</p>
+                      {filterRound==='all'&&<button onClick={startNewAudit} className="mt-6 bg-brand-600 text-white px-6 py-2 rounded-xl font-medium">เริ่มเลย</button>}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                      {filteredAudits.map(audit => (
+                        <div key={audit.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer group"
+                          onClick={() => { setSelectedReport(audit); setView('report'); }}>
+                          <div className="flex items-center gap-4">
+                            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold", audit.isPass?"bg-emerald-500":"bg-rose-500")}>
+                              {Math.round(audit.passPercentage)}%
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="font-bold text-slate-900">{audit.department}</h4>
+                                <span className="bg-brand-50 text-brand-600 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">รอบ {audit.round}</span>
+                                <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded uppercase", audit.isPass?"bg-emerald-100 text-emerald-700":"bg-rose-100 text-rose-700")}>{audit.isPass?'Pass':'Fail'}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                                <span className="flex items-center gap-1">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                  {audit.auditorName}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                                  {new Date(audit.timestamp).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={e => { e.stopPropagation(); editAudit(audit); }} className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors" title="แก้ไขรายงาน">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); generatePDF(audit); }} className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); setDeleteConfirmId(audit.id); }} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                            </button>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-300 group-hover:text-slate-500 transition-colors"><polyline points="9 18 15 12 9 6"/></svg>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── FORM ── */}
+          {view === 'form' && (
+            <div className="space-y-8 pb-20 animate-in">
+              <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-bold text-xl text-brand-600">ข้อมูลพื้นฐาน</h2>
+                  {isEditing && <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-1 rounded uppercase">โหมดแก้ไขรายงาน</span>}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                      รอบการตรวจ
+                    </label>
+                    <select value={currentAudit.round||1} onChange={e => setCurrentAudit(prev=>({...prev,round:Number(e.target.value)}))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+                      <option value={1}>ครั้งที่ 1</option>
+                      <option value={2}>ครั้งที่ 2</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        ชื่อผู้ตรวจ (Auditor)
+                      </label>
+                      <button onClick={() => setShowAuditorManager(!showAuditorManager)}
+                        className="text-[10px] font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-2 py-0.5 rounded uppercase transition-colors">
+                        {showAuditorManager ? 'ปิด' : 'จัดการรายชื่อ'}
+                      </button>
+                    </div>
+                    {showAuditorManager ? (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
+                        <div className="flex gap-2">
+                          <input type="text" placeholder="ชื่อผู้ตรวจ..." value={newAuditorName} onChange={e=>setNewAuditorName(e.target.value)}
+                            className="flex-1 text-xs bg-white border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-brand-500" />
+                          <button onClick={()=>{addAuditor(newAuditorName);setNewAuditorName('');}} className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-brand-700">เพิ่ม</button>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                          {auditors.map(a => (
+                            <div key={a.id} className="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                              <span className="text-xs text-slate-600">{a.name}</span>
+                              <button onClick={()=>removeAuditor(a.id)} className="text-slate-300 hover:text-rose-500 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                              </button>
+                            </div>
+                          ))}
+                          {auditors.length===0 && <p className="text-[10px] text-slate-400 italic text-center">ยังไม่มีรายชื่อ</p>}
+                        </div>
+                      </div>
+                    ) : (
+                      <select value={currentAudit.auditorName} onChange={e=>setCurrentAudit(prev=>({...prev,auditorName:e.target.value}))}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+                        <option value="">เลือกผู้ตรวจ...</option>
+                        {auditors.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                      แผนกที่เข้าตรวจ
+                    </label>
+                    <select value={currentAudit.department} onChange={e=>handleDepartmentChange(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+                      <option value="">เลือกแผนก</option>
+                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              {currentAudit.department && (
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between px-2">
+                    <h2 className="font-bold text-xl text-brand-600">รายการตรวจสอบ (Checklist)</h2>
+                    <button onClick={addCustomItem} className="text-brand-600 hover:text-brand-700 text-sm font-bold flex items-center gap-1.5 bg-brand-50 px-3 py-1.5 rounded-lg transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="16"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
+                      เพิ่มรายการตรวจสอบ
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {currentAudit.items.map((item, index) => (
+                      <div key={item.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4 animate-in">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex-1">
+                            {editingItemId === item.id || item.isCustom ? (
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-brand-500 uppercase tracking-wider">{item.isCustom?"รายการที่เพิ่มใหม่":`แก้ไขหัวข้อที่ ${index+1}`}</label>
+                                <div className="flex items-center gap-2">
+                                  <input type="text" autoFocus value={item.question} onChange={e=>updateItem(item.id,{question:e.target.value})}
+                                    onKeyDown={e=>{ if(e.key==='Enter') setEditingItemId(null); }}
+                                    placeholder="ระบุหัวข้อที่ต้องการตรวจสอบ..."
+                                    className="flex-1 font-bold text-slate-800 bg-transparent border-b border-brand-300 focus:border-brand-500 outline-none pb-1" />
+                                  {!item.isCustom && (
+                                    <button onClick={()=>setEditingItemId(null)} className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200 transition-colors">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-start justify-between group/title">
+                                <h3 className="font-bold text-slate-800 leading-snug flex-1">{index+1}. {item.question}</h3>
+                                <button onClick={()=>setEditingItemId(item.id)}
+                                  className="ml-2 p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-all opacity-0 group-hover/title:opacity-100">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {item.isCustom && (
+                            <button onClick={()=>removeCustomItem(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors p-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">ผลการตรวจ:</span>
+                          {['C','NC','OBS'].map(s => (
+                            <button key={s} onClick={()=>updateItem(item.id,{score:s})}
+                              className={cn("px-6 py-2 rounded-xl font-black transition-all border-2",
+                                item.score===s
+                                  ? s==='C' ? "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100 scale-105"
+                                  : s==='NC' ? "bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-100 scale-105"
+                                  : "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-100 scale-105"
+                                  : "bg-white border-slate-100 text-slate-400 hover:border-slate-200")}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">CAR No.:</span>
+                          <input type="text" placeholder="เลขที่ใบ CAR (ถ้ามี)" value={item.carNumber||''} onChange={e=>updateItem(item.id,{carNumber:e.target.value})}
+                            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-brand-500 w-full md:w-64" />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-6 py-2">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">ข้อกำหนด:</span>
+                          <div className="flex flex-wrap gap-4">
+                            {AUDIT_STANDARDS.map(standard => (
+                              <button key={standard} onClick={() => {
+                                const cur = item.standards||[];
+                                updateItem(item.id, { standards: cur.includes(standard) ? cur.filter(s=>s!==standard) : [...cur,standard] });
+                              }} className={cn("flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all",
+                                item.standards?.includes(standard) ? "bg-brand-50 border-brand-200 text-brand-700 shadow-sm" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200")}>
+                                <div className={cn("w-4 h-4 rounded flex items-center justify-center border transition-all",
+                                  item.standards?.includes(standard) ? "bg-brand-600 border-brand-600 text-white" : "bg-white border-slate-300")}>
+                                  {item.standards?.includes(standard) && <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="4" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>}
+                                </div>
+                                <span className="text-xs font-bold">{standard}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <textarea placeholder="ข้อเสนอแนะ / สิ่งที่พบ..." value={item.comment} onChange={e=>updateItem(item.id,{comment:e.target.value})}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm min-h-[80px] outline-none focus:ring-1 focus:ring-brand-500" />
+                          <div className="relative group">
+                            {item.photo ? (
+                              <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-200">
+                                <img src={item.photo} alt="evidence" className="w-full h-full object-cover" />
+                                <button onClick={()=>updateItem(item.id,{photo:undefined})}
+                                  className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center aspect-video bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400 mb-2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">แนบรูปถ่ายหลักฐาน</span>
+                                <div className="grid grid-cols-2 gap-2 w-full">
+                                  <label className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 cursor-pointer hover:border-brand-300 hover:text-brand-600 transition-all shadow-sm active:scale-95">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                                    ถ่ายรูป
+                                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>handlePhotoUpload(item.id,e)} />
+                                  </label>
+                                  <label className="flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 cursor-pointer hover:border-brand-300 hover:text-brand-600 transition-all shadow-sm active:scale-95">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                    เลือกรูป
+                                    <input type="file" accept="image/*" className="hidden" onChange={e=>handlePhotoUpload(item.id,e)} />
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {currentAudit.department && (
+                <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                  <h2 className="font-bold text-xl text-brand-600">ลงชื่อผู้ตรวจ (Digital Signature)</h2>
+                  <SignatureInput onSave={dataUrl=>setCurrentAudit(prev=>({...prev,signature:dataUrl}))} onClear={()=>setCurrentAudit(prev=>({...prev,signature:''}))} />
+                  {currentAudit.signature && (
+                    <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                      บันทึกลายเซ็นแล้ว
+                    </div>
+                  )}
+                </section>
+              )}
+
+              <div className="fixed bottom-6 left-0 right-0 px-4 max-w-4xl mx-auto">
+                <button onClick={submitAudit} className="w-full bg-brand-600 hover:bg-brand-700 text-white py-4 rounded-2xl font-bold text-lg shadow-xl transition-all active:scale-[0.98]">
+                  {isEditing ? 'บันทึกการแก้ไขรายงาน' : 'ส่งรายงานและบันทึกข้อมูล'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── SETTINGS ── */}
+          {view === 'settings' && (
+            <div className="space-y-8 pb-20 animate-in">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-2xl flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-brand-600"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                  การตั้งค่าระบบ
+                </h2>
+                <button onClick={()=>setView('dashboard')} className="text-slate-500 hover:text-slate-700 font-medium text-sm flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="19" x2="5" y1="12" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                  กลับหน้าหลัก
+                </button>
+              </div>
+
+              <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
+                <div className="space-y-4">
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-brand-600"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                    ธีมของระบบ (Themes)
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {THEMES.map(t => (
+                      <button key={t.id} onClick={()=>setTheme(t.id)}
+                        className={cn("flex items-center gap-3 p-4 rounded-2xl border-2 transition-all", theme===t.id?"border-brand-500 bg-brand-50 text-brand-700":"border-slate-100 bg-white text-slate-600 hover:border-slate-200")}>
+                        <div className="w-6 h-6 rounded-full shadow-inner" style={{ backgroundColor:t.color }} />
+                        <span className="font-bold text-sm">{t.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="h-px bg-slate-100" />
+                <div className="space-y-6">
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-brand-600"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/></svg>
+                    ความปลอดภัย (Security)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">อีเมลสำหรับรีเซ็ต PIN</label>
+                        <input type="email" value={adminEmail} onChange={e=>setAdminEmail(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-brand-500 transition-all"
+                          placeholder="admin@example.com" />
+                        <p className="text-[10px] text-slate-400">อีเมลนี้จะได้รับแจ้งเตือนเมื่อมีการขอรีเซ็ต PIN</p>
+                      </div>
+                      <button onClick={()=>updateSecuritySettings({adminEmail})} className="w-full bg-brand-600 text-white py-3 rounded-xl font-bold hover:bg-brand-700 transition-all active:scale-95">บันทึกอีเมล</button>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">เปลี่ยน PIN ใหม่ (6-10 หลัก)</label>
+                        <input type="password" maxLength={10} placeholder="ใส่ PIN ใหม่..." id="new-pin-input"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-brand-500 transition-all text-center text-xl font-black tracking-widest" />
+                        <p className="text-[10px] text-slate-400">PIN ต้องเป็นตัวเลข 6-10 หลักเท่านั้น</p>
+                      </div>
+                      <button onClick={()=>{
+                        const input = document.getElementById('new-pin-input');
+                        const newPin = input.value.replace(/\D/g,'');
+                        if(newPin.length>=6&&newPin.length<=10){ updateSecuritySettings({pin:newPin}); input.value=''; }
+                        else alert('กรุณาใส่ PIN 6-10 หลัก');
+                      }} className="w-full bg-brand-600 text-white py-3 rounded-xl font-bold hover:bg-brand-700 transition-all active:scale-95">เปลี่ยน PIN</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ── PLANNING ── */}
+          {view === 'planning' && (
+            <div className="space-y-8 pb-20 animate-in">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-2xl flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-brand-600"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                  แผนการตรวจรายแผนก
+                </h2>
+                <button onClick={()=>setView('dashboard')} className="text-slate-500 hover:text-slate-700 font-medium text-sm flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="19" x2="5" y1="12" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                  กลับหน้าหลัก
+                </button>
+              </div>
+
+              <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-brand-600"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  รายชื่อผู้ตรวจ (Auditors)
+                </h3>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="ชื่อผู้ตรวจคนใหม่..." value={newAuditorName} onChange={e=>setNewAuditorName(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                  <button onClick={()=>{addAuditor(newAuditorName);setNewAuditorName('');}} className="bg-brand-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-brand-700 transition-all active:scale-95">เพิ่ม</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {auditors.map(auditor => (
+                    <div key={auditor.id} className="bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-2 group">
+                      <span className="text-sm font-medium text-slate-700">{auditor.name}</span>
+                      <button onClick={()=>removeAuditor(auditor.id)} className="text-slate-400 hover:text-rose-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                  {auditors.length===0 && <p className="text-slate-400 text-xs italic">ยังไม่มีรายชื่อผู้ตรวจ</p>}
+                </div>
+              </section>
+
+              <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-brand-600"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="16"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
+                  เพิ่มแผนการตรวจใหม่
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { label:'แผนก', el: <select value={newPlanDept} onChange={e=>setNewPlanDept(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-brand-500"><option value="">เลือกแผนก...</option>{DEPARTMENTS.map(d=><option key={d} value={d}>{d}</option>)}</select> },
+                    { label:'วันที่ตรวจ', el: <input type="date" value={newPlanDate} onChange={e=>setNewPlanDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-brand-500" /> },
+                    { label:'ผู้รับผิดชอบการตรวจ', el: <select value={newPlanAuditorId} onChange={e=>setNewPlanAuditorId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-brand-500"><option value="">เลือกผู้ตรวจ...</option>{auditors.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select> },
+                    { label:'รอบการตรวจ', el: <select value={newPlanRound} onChange={e=>setNewPlanRound(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-brand-500"><option value={1}>ครั้งที่ 1</option><option value={2}>ครั้งที่ 2</option></select> },
+                  ].map(f => (
+                    <div key={f.label} className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400 uppercase">{f.label}</label>
+                      {f.el}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={()=>{
+                  if(!newPlanDept||!newPlanDate||!newPlanAuditorId){ alert('กรุณากรอกข้อมูลแผนการตรวจให้ครบถ้วน'); return; }
+                  addPlan({ department:newPlanDept, plannedDate:newPlanDate, auditorId:newPlanAuditorId, round:newPlanRound });
+                  setNewPlanDept(''); setNewPlanDate(''); setNewPlanAuditorId('');
+                }} className="w-full bg-brand-600 text-white py-3 rounded-xl font-bold hover:bg-brand-700 transition-all active:scale-[0.98]">
+                  บันทึกแผนการตรวจ
+                </button>
+              </section>
+
+              <div className="space-y-4">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-brand-600"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                  ตารางสรุปแผนการตรวจ
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>{['แผนก','รอบ','วันที่ตามแผน','ผู้ตรวจ','สถานะ','จัดการ'].map(h=><th key={h} className={cn("px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider",h==='จัดการ'?'text-center':'text-left')}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {plans.sort((a,b)=>new Date(a.plannedDate)-new Date(b.plannedDate)).map(plan => {
+                        const si = checkPlanStatus(plan);
+                        const auditor = auditors.find(a=>a.id===plan.auditorId);
+                        return (
+                          <tr key={plan.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-4"><p className="font-bold text-sm text-slate-900">{plan.department}</p></td>
+                            <td className="px-4 py-4"><span className="bg-brand-50 text-brand-600 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">รอบ {plan.round}</span></td>
+                            <td className="px-4 py-4"><p className="text-sm text-slate-600">{new Date(plan.plannedDate).toLocaleDateString()}</p></td>
+                            <td className="px-4 py-4"><p className="text-sm text-slate-600">{auditor?.name||'ไม่พบข้อมูล'}</p></td>
+                            <td className="px-4 py-4">
+                              {si.status==='completed' ? <div className="space-y-1"><span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>ตรวจแล้ว</span><p className="text-[10px] text-slate-400 italic">เมื่อ {new Date(si.date).toLocaleDateString()}</p></div>
+                              : si.status==='overdue' ? <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>เลยกำหนด</span>
+                              : <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/></svg>ตามแผน</span>}
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <button onClick={()=>removePlan(plan.id)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {plans.length===0 && <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400 italic text-sm">ยังไม่มีข้อมูลแผนการตรวจ</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── CARS ── */}
+          {view === 'cars' && (
+            <div className="space-y-6 animate-in">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-2xl flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-rose-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                  รายการ CAR ทั้งหมด
+                </h2>
+                <div className="flex items-center gap-3">
+                  <button onClick={()=>setShowQrModal('all')} className="bg-brand-50 text-brand-600 hover:bg-brand-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
+                    ส่ง QR Code ให้แผนก
+                  </button>
+                  <button onClick={()=>setView('dashboard')} className="text-slate-500 hover:text-slate-700 font-medium text-sm flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="19" x2="5" y1="12" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                    กลับหน้าหลัก
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {audits.flatMap(a=>a.cars).length===0 ? (
+                  <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-emerald-500 mx-auto mb-4"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <h3 className="font-bold text-lg">ไม่มีรายการ CAR ที่ต้องแก้ไข</h3>
+                    <p className="text-slate-500">ทุกอย่างเป็นไปตามมาตรฐาน</p>
+                  </div>
+                ) : (
+                  audits.flatMap(audit => audit.cars.map(car => (
+                    <div key={car.id} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase",
+                              car.severity===CARSeverity.CRITICAL?"bg-rose-600 text-white":car.severity===CARSeverity.MAJOR?"bg-rose-100 text-rose-700":"bg-amber-100 text-amber-700")}>
+                              {car.severity}
+                            </span>
+                            <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase border",
+                              car.status===CARStatus.OPEN?"border-rose-200 text-rose-600 bg-rose-50":car.status===CARStatus.PENDING?"border-amber-200 text-amber-600 bg-amber-50":"border-emerald-200 text-emerald-600 bg-emerald-50")}>
+                              {car.status}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-slate-900">{car.question}</h4>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1">
+                            <p className="text-xs text-slate-500">แผนก: {audits.find(a=>a.id===car.auditId)?.department}</p>
+                            {car.carNumber && <p className="text-xs font-bold text-rose-600">CAR No.: {car.carNumber}</p>}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">กำหนดเสร็จ</p>
+                          <p className="text-sm font-bold text-slate-700">{new Date(car.dueDate).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-xl">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">สิ่งที่พบ (Finding)</p>
+                        <p className="text-sm text-slate-700">{car.finding}</p>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                          <span className="text-xs text-slate-600">ผู้รับผิดชอบ: {car.assignedTo}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          {car.status!==CARStatus.CLOSED && <button onClick={()=>updateCARStatus(car.auditId,car.id,CARStatus.CLOSED)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors">ปิด CAR</button>}
+                          {car.status===CARStatus.OPEN && <button onClick={()=>updateCARStatus(car.auditId,car.id,CARStatus.PENDING)} className="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors">กำลังดำเนินการ</button>}
+                        </div>
+                      </div>
+                    </div>
+                  )))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── REPORT ── */}
+          {view === 'report' && selectedReport && (
+            <div className="space-y-6 pb-20 animate-in">
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+                <div className="bg-brand-600 p-8 text-white">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-3xl font-bold">รายงานผลการตรวจ</h2>
+                      <p className="opacity-80 mt-1">Internal Audit System Report</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-4xl font-black">{Math.round((selectedReport.totalScore/selectedReport.maxScore)*100)}%</div>
+                      <p className="text-xs uppercase tracking-widest opacity-70">Total Score</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-8 space-y-8">
+                  <div className="grid grid-cols-2 gap-8">
+                    {[
+                      {label:'Auditor',value:selectedReport.auditorName,align:''},
+                      {label:'Department',value:selectedReport.department,align:'text-right'},
+                      {label:'Date & Time',value:new Date(selectedReport.timestamp).toLocaleString(),align:''},
+                      {label:'Audit Round',value:`ครั้งที่ ${selectedReport.round}`,align:'text-right',brand:true},
+                      {label:'Audit ID',value:<span className="font-mono text-xs text-slate-500">{selectedReport.id.slice(0,8)}</span>,align:''},
+                    ].map(f => (
+                      <div key={f.label} className={cn("space-y-1", f.align)}>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{f.label}</p>
+                        <p className={cn("font-bold text-lg", f.brand&&"text-brand-600")}>{f.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-slate-100 pt-8">
+                    <h3 className="font-bold text-lg mb-4">รายละเอียดการตรวจสอบ</h3>
+                    <div className="space-y-6">
+                      {selectedReport.items.map((item,idx) => (
+                        <div key={item.id} className="space-y-3">
+                          <div className="flex justify-between items-start gap-4">
+                            <div>
+                              <p className="font-bold text-slate-800">{idx+1}. {item.question}</p>
+                              {item.standards?.length>0 && (
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {item.standards.map(s => <span key={s} className="text-[10px] font-bold bg-brand-50 text-brand-600 px-2 py-0.5 rounded border border-brand-100 uppercase">{s}</span>)}
+                                </div>
+                              )}
+                              {item.carNumber && <p className="text-xs font-bold text-rose-600 mt-1">CAR No.: {item.carNumber}</p>}
+                            </div>
+                            <span className={cn("px-3 py-1 rounded-full text-xs font-bold",
+                              item.score==='C'?"bg-emerald-100 text-emerald-700":item.score==='NC'?"bg-rose-100 text-rose-700":"bg-amber-100 text-amber-700")}>
+                              {item.score}
+                            </span>
+                          </div>
+                          {item.comment && <div className="bg-slate-50 p-3 rounded-xl text-sm text-slate-600 italic">"{item.comment}"</div>}
+                          {item.photo && <div className="max-w-xs rounded-xl overflow-hidden border border-slate-200"><img src={item.photo} alt="evidence" className="w-full h-auto" /></div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedReport.cars.length>0 && (
+                    <div className="border-t border-slate-100 pt-8">
+                      <h3 className="font-bold text-lg mb-4 text-rose-600 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                        Corrective Action Requests ({selectedReport.cars.length})
+                      </h3>
+                      <div className="space-y-4">
+                        {selectedReport.cars.map(car => (
+                          <div key={car.id} className="border border-rose-100 rounded-2xl p-4 bg-rose-50/30 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase",car.severity===CARSeverity.MAJOR?"bg-rose-100 text-rose-700":"bg-amber-100 text-amber-700")}>{car.severity}</span>
+                                <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase border",car.status===CARStatus.OPEN?"border-rose-200 text-rose-600 bg-rose-50":car.status===CARStatus.PENDING?"border-amber-200 text-amber-600 bg-amber-50":"border-emerald-200 text-emerald-600 bg-emerald-50")}>{car.status}</span>
+                              </div>
+                              <p className="text-xs text-slate-500">กำหนด: {new Date(car.dueDate).toLocaleDateString()}</p>
+                            </div>
+                            <p className="font-bold text-slate-800 text-sm">{car.question}</p>
+                            {car.carNumber && <p className="text-xs font-bold text-rose-600">CAR No.: {car.carNumber}</p>}
+                            <p className="text-xs text-slate-500">ผู้รับผิดชอบ: {car.assignedTo}</p>
+                            {car.rootCause && (
+                              <div className="mt-2 p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">การตอบกลับ</p>
+                                <p className="text-xs text-slate-600"><span className="font-bold">Root Cause:</span> {car.rootCause}</p>
+                                <p className="text-xs text-slate-600"><span className="font-bold">Correction:</span> {car.correction}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="border-t border-slate-100 pt-8 flex justify-between items-end">
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Digital Signature</p>
+                      {selectedReport.signature && <img src={selectedReport.signature} alt="signature" className="h-16 w-auto border-b border-slate-300" />}
+                      <p className="text-sm font-medium text-slate-700">{selectedReport.auditorName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-400 italic">Generated by Cosmetic Internal Audit System</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <button onClick={()=>generatePDF(selectedReport)} className="flex-1 bg-brand-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                  ดาวน์โหลด PDF
+                </button>
+                <button onClick={()=>setView('dashboard')} className="flex-1 bg-white border border-slate-200 text-slate-600 py-4 rounded-2xl font-bold shadow-sm">กลับหน้าหลัก</button>
+              </div>
+            </div>
+          )}
+
+          {/* ── RESPOND (QR mode) ── */}
+          {view === 'respond' && responseDept && (
+            <div className="max-w-4xl mx-auto space-y-6 animate-in">
+              <div className="bg-brand-600 p-8 rounded-3xl text-white shadow-xl">
+                <h2 className="font-bold text-3xl mb-2 flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  ระบบตอบกลับ CAR ออนไลน์
+                </h2>
+                <p className="opacity-80">แผนก: <span className="font-bold">{responseDept}</span></p>
+              </div>
+              <div className="space-y-4">
+                {audits.flatMap(a=>a.cars).filter(c=>audits.find(a=>a.id===c.auditId)?.department===responseDept&&c.status!==CARStatus.CLOSED).length===0 ? (
+                  <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-emerald-500 mx-auto mb-4"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <h3 className="font-bold text-lg">ไม่มีรายการ CAR ค้างคา</h3>
+                    <p className="text-slate-500">ขอบคุณที่ให้ความร่วมมือในการแก้ไข</p>
+                  </div>
+                ) : (
+                  audits.flatMap(audit => audit.cars.map(car => {
+                    if(audits.find(a=>a.id===car.auditId)?.department!==responseDept||car.status===CARStatus.CLOSED) return null;
+                    return (
+                      <div key={car.id} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="space-y-1">
+                              <span className={cn("px-2 py-0.5 rounded text-[10px] font-black uppercase",car.severity===CARSeverity.MAJOR?"bg-rose-100 text-rose-700":"bg-amber-100 text-amber-700")}>{car.severity}</span>
+                              <h4 className="font-bold text-xl text-slate-900">{car.question}</h4>
+                              {car.carNumber && <p className="text-sm font-bold text-rose-600">CAR No.: {car.carNumber}</p>}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase">กำหนดเสร็จ</p>
+                              <p className="text-sm font-bold text-rose-600">{new Date(car.dueDate).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="bg-white p-4 rounded-2xl border border-slate-200">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">สิ่งที่พบ (Finding)</p>
+                            <p className="text-slate-700">{car.finding}</p>
+                          </div>
+                        </div>
+                        <div className="p-6 space-y-6">
+                          {respondingCar?.id===car.id ? (
+                            <div className="space-y-6 animate-in">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {[
+                                  {key:'rootCause',label:'สาเหตุที่แท้จริง (Root Cause)',ph:'ระบุสาเหตุที่ทำให้เกิดปัญหานี้...'},
+                                  {key:'correction',label:'การแก้ไขเบื้องต้น (Correction)',ph:'ระบุการแก้ไขที่ทำไปแล้วทันที...'},
+                                ].map(f=>(
+                                  <div key={f.key} className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">{f.label}</label>
+                                    <textarea className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 min-h-[100px] outline-none focus:ring-2 focus:ring-brand-500" placeholder={f.ph}
+                                      value={carResponseData[f.key]} onChange={e=>setCarResponseData({...carResponseData,[f.key]:e.target.value})} />
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {[
+                                  {key:'preventiveAction',label:'การป้องกัน (Preventive Action)',ph:'ระบุแนวทางป้องกันไม่ให้เกิดซ้ำ...'},
+                                  {key:'correctiveAction',label:'Corrective Action',ph:'ระบุแนวทางแก้ไขระยะยาว...'},
+                                ].map(f=>(
+                                  <div key={f.key} className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">{f.label}</label>
+                                    <textarea className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 min-h-[100px] outline-none focus:ring-2 focus:ring-brand-500" placeholder={f.ph}
+                                      value={carResponseData[f.key]} onChange={e=>setCarResponseData({...carResponseData,[f.key]:e.target.value})} />
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase">รูปภาพหลักฐานการแก้ไข</label>
+                                <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-4 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer relative min-h-[100px]">
+                                  {carResponseData.photo ? (
+                                    <div className="relative w-full">
+                                      <img src={carResponseData.photo} alt="evidence" className="w-full h-auto rounded-xl" />
+                                      <button onClick={()=>setCarResponseData({...carResponseData,photo:''})} className="absolute top-2 right-2 bg-rose-600 text-white p-1 rounded-full shadow-lg">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400 mb-2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                                      <p className="text-xs text-slate-500">คลิกเพื่อถ่ายรูปหรืออัปโหลด</p>
+                                      <input type="file" accept="image/*" capture="environment" className="absolute inset-0 opacity-0 cursor-pointer"
+                                        onChange={e=>{const f=e.target.files?.[0];if(f){const r=new FileReader();r.onloadend=()=>setCarResponseData({...carResponseData,photo:r.result});r.readAsDataURL(f);}}} />
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase">ลายเซ็นผู้รับผิดชอบ</label>
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                  <SignatureInput onSave={sig=>setCarResponseData({...carResponseData,signature:sig})} onClear={()=>setCarResponseData({...carResponseData,signature:''})} />
+                                </div>
+                              </div>
+                              <div className="flex gap-3 pt-4">
+                                <button onClick={submitCARResponse} className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg active:scale-[0.98]">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                  ส่งข้อมูลการแก้ไข
+                                </button>
+                                <button onClick={()=>setRespondingCar(null)} className="px-8 bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all">ยกเลิก</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={()=>setRespondingCar(car)} className="w-full bg-brand-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-brand-700 transition-all shadow-lg active:scale-[0.98]">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                              ตอบกลับ CAR นี้
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }))
+                )}
+              </div>
+            </div>
+          )}
+          </>
+        )}
+      </main>
+
+      {/* ── QR MODAL ── */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={()=>setShowQrModal(null)} />
+          <div className="relative bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden">
+            <div className="p-8 space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-bold text-slate-900">QR Code สำหรับแผนก</h3>
+                <button onClick={()=>setShowQrModal(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
+                {DEPARTMENTS.map(dept => {
+                  const url = `${window.location.origin}${window.location.pathname}?dept=${encodeURIComponent(dept)}`;
+                  return (
+                    <div key={dept} className="bg-slate-50 p-4 rounded-3xl border border-slate-100 flex flex-col items-center space-y-3">
+                      <p className="font-bold text-slate-800">{dept}</p>
+                      <div className="bg-white p-3 rounded-2xl shadow-sm qr-container">
+                        <QRCode value={url} size={120} />
+                      </div>
+                      <button onClick={()=>{ navigator.clipboard.writeText(url); alert('คัดลอกลิงก์เรียบร้อยแล้ว'); }}
+                        className="text-[10px] font-bold text-brand-600 uppercase tracking-wider hover:underline">
+                        คัดลอกลิงก์
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE MODAL ── */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={()=>setDeleteConfirmId(null)} />
+          <div className="relative bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
+            <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2">ยืนยันการลบ?</h3>
+            <p className="text-slate-500 mb-8 leading-relaxed">คุณต้องการลบรายงานการตรวจนี้ใช่หรือไม่? <br/><span className="text-rose-500 font-bold">การกระทำนี้ไม่สามารถย้อนกลับได้</span></p>
+            <div className="grid grid-cols-2 gap-4">
+              <button onClick={()=>setDeleteConfirmId(null)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-colors">ยกเลิก</button>
+              <button onClick={()=>deleteAudit(deleteConfirmId)} className="py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-colors shadow-lg shadow-rose-200">ยืนยันการลบ</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
