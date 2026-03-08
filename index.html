@@ -1238,11 +1238,13 @@ function App() {
                                 const existingCount = isNC
                                   ? audits.reduce((acc,a)=>acc+a.cars.filter(c=>c.severity===CARSeverity.MAJOR).length,0)
                                   : audits.reduce((acc,a)=>acc+a.cars.filter(c=>c.severity===CARSeverity.MINOR).length,0);
-                                const currentItemCount = (currentAudit?.items||[]).filter(i=>i.id!==item.id&&i.score===s).length;
-                                const seq = existingCount + currentItemCount + 1;
-                                const autoNo = `${prefix}-${year}-${String(seq).padStart(3,'0')}`;
-                                // รัน autoNo ใหม่ทุกครั้งที่เปลี่ยน score (ไม่ใช้เลขเก่า)
-                                updateItem(item.id, { score:s, carNumber: autoNo });
+                                // อ่านค่า items ล่าสุดผ่าน functional update เพื่อหลีกเลี่ยง stale closure
+                                setCurrentAudit(prev => {
+                                  const currentItemCount = prev.items.filter(i=>i.id!==item.id&&i.score===s).length;
+                                  const seq = existingCount + currentItemCount + 1;
+                                  const autoNo = `${prefix}-${year}-${String(seq).padStart(3,'0')}`;
+                                  return { ...prev, items: prev.items.map(i => i.id===item.id ? {...i, score:s, carNumber:autoNo} : i) };
+                                });
                               } else {
                                 updateItem(item.id, { score:s, carNumber:'' });
                               }
