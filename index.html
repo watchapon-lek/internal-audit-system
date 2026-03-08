@@ -512,6 +512,8 @@ function App() {
   const [showQrModal, setShowQrModal]   = useState(null);
   const [newAuditorName, setNewAuditorName] = useState('');
   const [selectedNCRCar, setSelectedNCRCar] = useState(null);
+  const [ncrDraft2, setNcrDraft2] = useState({});  // draft for step 2 inputs
+  const [ncrDraft3, setNcrDraft3] = useState({});  // draft for step 3 inputs
   const [toast, setToast] = useState(null);
   const showToast = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null), 3000); };
   const [newPlanDept, setNewPlanDept]   = useState('');
@@ -1653,7 +1655,13 @@ function App() {
                           <span className="text-xs text-slate-600">ผู้รับผิดชอบ: {car.assignedTo}</span>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={()=>{ setSelectedNCRCar({...car, auditDept: audits.find(a=>a.id===car.auditId)?.department, auditDate: audits.find(a=>a.id===car.auditId)?.timestamp}); setView('ncr'); }} className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-brand-700 transition-colors flex items-center gap-1">
+                          <button onClick={()=>{ 
+                            const c = {...car, auditDept: audits.find(a=>a.id===car.auditId)?.department, auditDate: audits.find(a=>a.id===car.auditId)?.timestamp};
+                            setSelectedNCRCar(c); 
+                            setNcrDraft2({rootCause:car.rootCause||'',correction:car.correction||'',preventiveAction:car.preventiveAction||'',actionDuration:car.actionDuration||'',verifyBy:car.verifyBy||'',actionStartDate:car.actionStartDate||'',followUpDate:car.followUpDate||'',actionBy:car.actionBy||'',actionByPosition:car.actionByPosition||'',actionKnownDate:car.actionKnownDate||''});
+                            setNcrDraft3({verifyResult:car.verifyResult||'',verifyBy:car.verifyBy||'',verifyDate:car.verifyDate||''});
+                            setView('ncr'); 
+                          }} className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-brand-700 transition-colors flex items-center gap-1">
                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             ออก NCR
                           </button>
@@ -1676,10 +1684,11 @@ function App() {
             const isNC = car.severity === CARSeverity.MAJOR;
             const isOBS = car.severity === CARSeverity.MINOR;
 
+            // ใช้ locked flag เป็นตัวกำหนดสถานะ ไม่ใช่ข้อมูลที่พิมพ์
             const step1Done = true;
-            const step2Done = !!(car.rootCause && car.correction);
+            const step2Done = !!(car.step2Locked);
             const step2Active = !step2Done;
-            const step3Done = !!(car.verifyResult);
+            const step3Done = !!(car.step3Locked);
             const step3Active = step2Done && !step3Done;
             const step4Done = car.status === CARStatus.CLOSED;
             const step4Active = step3Done && !step4Done;
@@ -1957,21 +1966,21 @@ function App() {
                     {/* สาเหตุ */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-500 uppercase">สาเหตุ</label>
-                      <textarea disabled={step2Done} value={car.rootCause||''} onChange={e=>updateNCRCar({rootCause:e.target.value})}
+                      <textarea disabled={step2Done} value={step2Done ? (car.rootCause||'') : (ncrDraft2.rootCause??car.rootCause??'')} onChange={e=>setNcrDraft2(p=>({...p,rootCause:e.target.value}))}
                         placeholder="ระบุสาเหตุที่แท้จริง..."
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm min-h-[72px] outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none" />
                     </div>
                     {/* แนวทางการแก้ไข */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-500 uppercase">แนวทางการแก้ไข</label>
-                      <textarea disabled={step2Done} value={car.correction||''} onChange={e=>updateNCRCar({correction:e.target.value})}
+                      <textarea disabled={step2Done} value={step2Done ? (car.correction||'') : (ncrDraft2.correction??car.correction??'')} onChange={e=>setNcrDraft2(p=>({...p,correction:e.target.value}))}
                         placeholder="รายละเอียดการแก้ไข..."
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm min-h-[72px] outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none" />
                     </div>
                     {/* แนวทางการป้องกัน */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-500 uppercase">แนวทางการป้องกัน</label>
-                      <textarea disabled={step2Done} value={car.preventiveAction||''} onChange={e=>updateNCRCar({preventiveAction:e.target.value})}
+                      <textarea disabled={step2Done} value={step2Done ? (car.preventiveAction||'') : (ncrDraft2.preventiveAction??car.preventiveAction??'')} onChange={e=>setNcrDraft2(p=>({...p,preventiveAction:e.target.value}))}
                         placeholder="แนวทางป้องกันไม่ให้เกิดซ้ำ..."
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm min-h-[72px] outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none" />
                     </div>
@@ -1979,44 +1988,44 @@ function App() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">ระยะเวลาดำเนินการ</label>
-                        <input disabled={step2Done} type="text" value={car.actionDuration||''} onChange={e=>updateNCRCar({actionDuration:e.target.value})}
+                        <input disabled={step2Done} type="text" value={step2Done?(car.actionDuration||''):(ncrDraft2.actionDuration??car.actionDuration??'')} onChange={e=>setNcrDraft2(p=>({...p,actionDuration:e.target.value}))}
                           placeholder="เช่น 7 วัน" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">ผู้ตรวจจดติดตาม</label>
-                        <input disabled={step2Done} type="text" value={car.verifyBy||''} onChange={e=>updateNCRCar({verifyBy:e.target.value})}
+                        <input disabled={step2Done} type="text" value={step2Done?(car.verifyBy||''):(ncrDraft2.verifyBy??car.verifyBy??'')} onChange={e=>setNcrDraft2(p=>({...p,verifyBy:e.target.value}))}
                           placeholder="ชื่อผู้ตรวจติดตาม" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">วันที่เริ่มดำเนินการ</label>
-                        <input disabled={step2Done} type="date" value={car.actionStartDate||''} onChange={e=>updateNCRCar({actionStartDate:e.target.value})}
+                        <input disabled={step2Done} type="date" value={step2Done?(car.actionStartDate||''):(ncrDraft2.actionStartDate??car.actionStartDate??'')} onChange={e=>setNcrDraft2(p=>({...p,actionStartDate:e.target.value}))}
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">วันที่ตรวจจดติดตาม</label>
-                        <input disabled={step2Done} type="date" value={car.followUpDate||''} onChange={e=>updateNCRCar({followUpDate:e.target.value})}
+                        <input disabled={step2Done} type="date" value={step2Done?(car.followUpDate||''):(ncrDraft2.followUpDate??car.followUpDate??'')} onChange={e=>setNcrDraft2(p=>({...p,followUpDate:e.target.value}))}
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">ผู้รับผิดชอบการแก้ไข</label>
-                        <input disabled={step2Done} type="text" value={car.actionBy||''} onChange={e=>updateNCRCar({actionBy:e.target.value})}
+                        <input disabled={step2Done} type="text" value={step2Done?(car.actionBy||''):(ncrDraft2.actionBy??car.actionBy??'')} onChange={e=>setNcrDraft2(p=>({...p,actionBy:e.target.value}))}
                           placeholder="ชื่อผู้รับผิดชอบ" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">ตำแหน่ง</label>
-                        <input disabled={step2Done} type="text" value={car.actionByPosition||''} onChange={e=>updateNCRCar({actionByPosition:e.target.value})}
+                        <input disabled={step2Done} type="text" value={step2Done?(car.actionByPosition||''):(ncrDraft2.actionByPosition??car.actionByPosition??'')} onChange={e=>setNcrDraft2(p=>({...p,actionByPosition:e.target.value}))}
                           placeholder="ตำแหน่งงาน" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                       </div>
                       <div className="space-y-1 col-span-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">วันที่ทราบให้แก้ไข</label>
-                        <input disabled={step2Done} type="date" value={car.actionKnownDate||''} onChange={e=>updateNCRCar({actionKnownDate:e.target.value})}
+                        <input disabled={step2Done} type="date" value={step2Done?(car.actionKnownDate||''):(ncrDraft2.actionKnownDate??car.actionKnownDate??'')} onChange={e=>setNcrDraft2(p=>({...p,actionKnownDate:e.target.value}))}
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                       </div>
                     </div>
                     {!step2Done && (
                       <button onClick={()=>{
-                        if(!car.rootCause||!car.correction){alert('กรุณากรอกสาเหตุและแนวทางการแก้ไข');return;}
-                        updateNCRCar({responseDate:new Date().toISOString(),step2Locked:true});
+                        if(!ncrDraft2.rootCause||!ncrDraft2.correction){alert('กรุณากรอกสาเหตุและแนวทางการแก้ไข');return;}
+                        updateNCRCar({...ncrDraft2, responseDate:new Date().toISOString(), step2Locked:true});
                         updateCARStatus(car.auditId,car.id,CARStatus.PENDING);
                         showToast('✅ บันทึกขั้นตอนที่ 2 แล้ว');
                       }} className="w-full bg-brand-600 text-white py-3 rounded-xl font-bold hover:bg-brand-700 transition-all active:scale-[0.98]">
@@ -2041,26 +2050,26 @@ function App() {
                       <>
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold text-slate-500 uppercase">ผลการตรวจติดตาม</label>
-                          <textarea disabled={step3Done} value={car.verifyResult||''} onChange={e=>updateNCRCar({verifyResult:e.target.value})}
+                          <textarea disabled={step3Done} value={step3Done?(car.verifyResult||''):(ncrDraft3.verifyResult??car.verifyResult??'')} onChange={e=>setNcrDraft3(p=>({...p,verifyResult:e.target.value}))}
                             placeholder="บันทึกผลการตรวจติดตาม..."
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm min-h-[90px] outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none" />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase">ผู้ตรวจติดตามผล</label>
-                            <input disabled={step3Done} type="text" value={car.verifyBy||''} onChange={e=>updateNCRCar({verifyBy:e.target.value})}
+                            <input disabled={step3Done} type="text" value={step3Done?(car.verifyBy||''):(ncrDraft3.verifyBy??car.verifyBy??'')} onChange={e=>setNcrDraft3(p=>({...p,verifyBy:e.target.value}))}
                               placeholder="ชื่อผู้ตรวจ" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                           </div>
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase">วันที่ตรวจติดตาม</label>
-                            <input disabled={step3Done} type="date" value={car.verifyDate||''} onChange={e=>updateNCRCar({verifyDate:e.target.value})}
+                            <input disabled={step3Done} type="date" value={step3Done?(car.verifyDate||''):(ncrDraft3.verifyDate??car.verifyDate??'')} onChange={e=>setNcrDraft3(p=>({...p,verifyDate:e.target.value}))}
                               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed" />
                           </div>
                         </div>
                         {!step3Done&&(
                           <button onClick={()=>{
-                            if(!car.verifyResult){alert('กรุณากรอกผลการตรวจติดตาม');return;}
-                            updateNCRCar({verifyLockedDate:new Date().toISOString(),step3Locked:true});
+                            if(!ncrDraft3.verifyResult){alert('กรุณากรอกผลการตรวจติดตาม');return;}
+                            updateNCRCar({...ncrDraft3, verifyLockedDate:new Date().toISOString(), step3Locked:true});
                             showToast('✅ บันทึกขั้นตอนที่ 3 แล้ว');
                           }} className="w-full bg-brand-600 text-white py-3 rounded-xl font-bold hover:bg-brand-700 transition-all active:scale-[0.98]">
                             บันทึกผลการตรวจติดตาม
