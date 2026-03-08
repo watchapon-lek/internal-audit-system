@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.9.2/confetti.browser.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1620,83 +1621,146 @@ function App() {
               setSelectedNCRCar(prev => ({ ...prev, ...updates }));
             };
 
-            const downloadNCR = () => {
-              const doc = new jspdf.jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-              const W=210; const M=14; let y=12;
-              // Logo area + header
-              doc.setFillColor(255,255,255); doc.rect(M,y,40,14,'S');
-              doc.setFont('helvetica','bold'); doc.setFontSize(10);
-              doc.text('wann', M+2, y+6); doc.setFontSize(7); doc.setFont('helvetica','normal');
-              doc.text('COSMETICS & LABORATORY', M+2, y+11);
-              doc.setFont('helvetica','bold'); doc.setFontSize(9);
-              doc.text('(CAR/PAR : Corrective & Preventive Action Request)', W/2+10, y+5, {align:'center'});
-              doc.setFontSize(11); doc.text('แบบร้องขอให้แก้ไขและป้องกันสิ่งที่ไม่ได้เป็นไปตามระบบบริหารคุณภาพ', W/2+10, y+12, {align:'center'});
-              y+=18;
-              doc.setFont('helvetica','normal'); doc.setFontSize(8);
-              doc.text(`วันที่เสนอปัญหา: ${new Date(car.issuedDate).toLocaleDateString('th-TH')}`, M, y);
-              doc.text(`วันที่ออก CAR/PAR: ${new Date(car.issuedDate).toLocaleDateString('th-TH')}`, M+65, y);
-              doc.text(`เลขที่ CAR/PAR No: ${car.carNumber||car.id.slice(0,8).toUpperCase()}`, M+130, y);
-              y+=6;
-              doc.text(`แผนก: ${dept}`, M, y);
-              doc.text(`ฝ่ายงาน: ${dept}`, M+130, y);
-              y+=6;
-              // IQA ref
-              doc.text(`สาเหตุของการออก CAR/PAR:  ☑ IQA ครั้งที่: ${audit?.round||1}/${new Date(car.issuedDate).getFullYear()}`, M, y);
-              y+=7;
-              // Border line
-              doc.setLineWidth(0.5); doc.line(M,y,W-M,y); y+=4;
-              // Finding
-              doc.setFont('helvetica','bold'); doc.setFontSize(8);
-              doc.text('รายละเอียดของข้อบกพร่อง หรือ สิ่งที่ไม่เป็นไปตามข้อกำหนด (รบุ):', M, y); y+=5;
-              doc.setFont('helvetica','normal');
-              doc.text(car.finding||car.question||'-', M+2, y, {maxWidth:W-2*M-4}); y+=8;
-              doc.line(M,y,W-M,y); y+=4;
-              // Severity
-              doc.setFont('helvetica','bold'); doc.setFontSize(8);
-              doc.text('ระดับความรุนแรง:', M, y);
-              doc.setFont('helvetica','normal');
-              doc.text(`${isNC?'☑':'☐'} MAJOR  ${isNC?'☐':'☑'} MINOR  ${isNC?'☐':'☑'} NON N/C  ${isOBS?'☑':'☐'} OBSERVATION`, M+35, y);
-              y+=5;
-              doc.text(`(ร้ายแรงมาก)       (ร้ายแรง)        (ข้อเสนอแนะ)`, M+35, y); y+=5;
-              doc.text(`Auditor/ผู้ตรวจรายงานปัญหา: ${car.issuedBy||'-'}`, M, y); y+=8;
-              doc.line(M,y,W-M,y); y+=4;
-              // Step 2
-              doc.setFont('helvetica','bold'); doc.setFillColor(30,30,30); doc.setTextColor(255,255,255);
-              doc.rect(M,y,W-2*M,6,'F');
-              doc.text('การหาสาเหตุ แก้ไข และป้องกัน', M+2, y+4.5);
-              doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(8); y+=8;
-              doc.text(`สาเหตุ: ${car.rootCause||'-'}`, M, y, {maxWidth:W-2*M}); y+=8;
-              doc.text(`แนวทางการแก้ไข: ${car.correction||'-'}`, M, y, {maxWidth:W-2*M}); y+=8;
-              doc.text(`แนวทางการป้องกัน: ${car.preventiveAction||'-'}`, M, y, {maxWidth:W-2*M}); y+=7;
-              doc.text(`ระยะเวลาดำเนินการ: ${car.actionDuration||'-'}`, M, y);
-              doc.text(`ผู้ตรวจจดติดตาม: ${car.verifyBy||'-'}`, M+95, y); y+=5;
-              doc.text(`วันที่เริ่มดำเนินการ: ${car.actionStartDate||'-'}`, M, y);
-              doc.text(`วันที่ตรวจจดติดตาม: ${car.verifyDate||'-'}`, M+95, y); y+=5;
-              doc.text(`ผู้รับผิดชอบการแก้ไข: ${car.actionBy||car.assignedTo||'-'}`, M, y); y+=5;
-              doc.text(`ตำแหน่ง: -`, M, y); y+=5;
-              doc.text(`วันที่ทราบให้แก้ไข: ${car.responseDate?new Date(car.responseDate).toLocaleDateString('th-TH'):'-'}`, M, y); y+=8;
-              doc.line(M,y,W-M,y); y+=4;
-              // Step 3
-              doc.setFont('helvetica','bold'); doc.setFillColor(30,30,30); doc.setTextColor(255,255,255);
-              doc.rect(M,y,W-2*M,6,'F');
-              doc.text('การตรวจติดตามผลการแก้ไข และการป้องกัน', M+2, y+4.5);
-              doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); y+=8;
-              doc.text(`ผลการตรวจติดตาม: ${car.verifyResult||'-'}`, M, y, {maxWidth:W-2*M}); y+=10;
-              doc.text(`ผู้ตรวจติดตามผล: ${car.verifyBy||'-'}`, M, y);
-              doc.text(`วันที่ตรวจติดตาม: ${car.verifyDate||'-'}`, M+95, y); y+=8;
-              doc.line(M,y,W-M,y); y+=4;
-              // Step 4
-              doc.setFont('helvetica','bold'); doc.setFillColor(30,30,30); doc.setTextColor(255,255,255);
-              doc.rect(M,y,W-2*M,6,'F');
-              doc.text('การรับรองมาตรการหาสาเหตุ แก้ไข และป้องกัน', M+2, y+4.5);
-              doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); y+=8;
-              doc.text(`${step4Done&&car.closeType==='accept'?'☑':'☐'} ยอมรับการแก้ไข และปิด CAR/PAR`, M, y);
-              doc.text(`QMR: ${car.qmrName||'-'}`, M+110, y); y+=5;
-              doc.text(`${step4Done&&car.closeType==='reopen'?'☑':'☐'} ไม่ยอมรับการแก้ไข และต้องตรวจติดตามผลครั้งที่ 2 เปิด CAR/PAR No. ${car.reopenNo||'___________'}`, M, y);
-              doc.text(`วันที่: ${car.closeApproveDate||'-'}`, M+110, y+5); y+=12;
-              doc.setFontSize(7); doc.setTextColor(150,150,150);
-              doc.text('FM-MR-06/01', W-M, 287, {align:'right'});
-              doc.save(`CAR_PAR_${dept}_${car.carNumber||car.id.slice(0,8)}.pdf`);
+            const downloadNCR = async () => {
+              const carNo = car.carNumber||car.id.slice(0,8).toUpperCase();
+              const fmt = (d) => d ? new Date(d).toLocaleDateString('th-TH') : '-';
+              const chk = (v) => v ? '☑' : '☐';
+
+              // Build printable HTML
+              const html = `
+<div id="ncr-print" style="font-family:Sarabun,sans-serif;font-size:11px;color:#000;width:720px;padding:24px;background:#fff;line-height:1.6">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet"/>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:8px">
+    <div><div style="font-weight:700;font-size:13px">wann</div><div style="font-size:9px">COSMETICS & LABORATORY</div></div>
+    <div style="text-align:center;flex:1;padding:0 16px">
+      <div style="font-weight:700;font-size:12px">(CAR/PAR : Corrective &amp; Preventive Action Request)</div>
+      <div style="font-size:11px">แบบร้องขอให้แก้ไขและป้องกันสิ่งที่ไม่ได้เป็นไปตามระบบบริหารคุณภาพ</div>
+    </div>
+    <div style="font-size:10px;text-align:right;white-space:nowrap">
+      <div>เลขที่ CAR/PAR No.</div>
+      <div style="font-weight:700">${carNo}</div>
+    </div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:6px">
+    <tr>
+      <td style="width:33%">วันที่เสนอปัญหา: <b>${fmt(car.issuedDate)}</b></td>
+      <td style="width:33%">วันที่ออก CAR/PAR: <b>${fmt(car.issuedDate)}</b></td>
+      <td style="width:33%">แผนก: <b>${dept}</b></td>
+    </tr>
+    <tr>
+      <td colspan="2">ฝ่ายงาน: <b>${dept}</b></td>
+      <td>IQA ครั้งที่: <b>${audit?.round||1}/${new Date(car.issuedDate).getFullYear()}</b></td>
+    </tr>
+  </table>
+
+  <div style="border:1px solid #000;padding:6px 8px;margin-bottom:6px">
+    <div style="font-weight:700;margin-bottom:4px">รายละเอียดของข้อบกพร่อง หรือ สิ่งที่ไม่เป็นไปตามข้อกำหนด (ระบุ):</div>
+    <div style="min-height:36px">${car.finding||car.question||'-'}</div>
+  </div>
+
+  <div style="border:1px solid #000;padding:6px 8px;margin-bottom:6px">
+    <div style="font-weight:700;margin-bottom:4px">ระดับความรุนแรง:</div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap">
+      <span>${chk(isNC&&!isOBS)} MAJOR <span style="font-size:9px">(ร้ายแรงมาก)</span></span>
+      <span>${chk(!isNC&&!isOBS)} MINOR <span style="font-size:9px">(ร้ายแรง)</span></span>
+      <span>${chk(false)} NON N/C <span style="font-size:9px">(ข้อเสนอแนะ)</span></span>
+      <span>${chk(isOBS)} OBSERVATION <span style="font-size:9px">(OBS)</span></span>
+    </div>
+    <div style="margin-top:6px">Auditor/ผู้ตรวจรายงานปัญหา: <b>${car.issuedBy||'-'}</b></div>
+  </div>
+
+  <div style="background:#1e293b;color:#fff;font-weight:700;padding:4px 8px;margin-bottom:0">การหาสาเหตุ แก้ไข และป้องกัน</div>
+  <div style="border:1px solid #000;border-top:none;padding:6px 8px;margin-bottom:6px">
+    <table style="width:100%;font-size:11px">
+      <tr><td style="width:15%;font-weight:700;vertical-align:top">สาเหตุ:</td><td style="min-height:28px">${car.rootCause||'-'}</td></tr>
+      <tr><td style="font-weight:700;vertical-align:top">แนวทางการแก้ไข:</td><td>${car.correction||'-'}</td></tr>
+      <tr><td style="font-weight:700;vertical-align:top">แนวทางการป้องกัน:</td><td>${car.preventiveAction||'-'}</td></tr>
+    </table>
+    <table style="width:100%;font-size:11px;margin-top:6px">
+      <tr>
+        <td style="width:50%">ระยะเวลาดำเนินการ: <b>${car.actionDuration||'-'}</b></td>
+        <td>ผู้ตรวจจดติดตาม: <b>${car.verifyBy||'-'}</b></td>
+      </tr>
+      <tr>
+        <td>วันที่เริ่มดำเนินการ: <b>${car.actionStartDate||'-'}</b></td>
+        <td>วันที่ตรวจจดติดตาม: <b>${car.followUpDate||'-'}</b></td>
+      </tr>
+      <tr>
+        <td>ผู้รับผิดชอบการแก้ไข: <b>${car.actionBy||car.assignedTo||'-'}</b></td>
+        <td>วันที่ทราบให้แก้ไข: <b>${car.actionKnownDate||fmt(car.responseDate)||'-'}</b></td>
+      </tr>
+      <tr><td>ตำแหน่ง: <b>${car.actionByPosition||'-'}</b></td><td></td></tr>
+    </table>
+  </div>
+
+  <div style="background:#1e293b;color:#fff;font-weight:700;padding:4px 8px;margin-bottom:0">การตรวจติดตามผลการแก้ไข และการป้องกัน</div>
+  <div style="border:1px solid #000;border-top:none;padding:6px 8px;margin-bottom:6px">
+    <div>ผลการตรวจติดตาม: <b>${car.verifyResult||'-'}</b></div>
+    <table style="width:100%;font-size:11px;margin-top:6px">
+      <tr>
+        <td style="width:50%">ผู้ตรวจติดตามผล: <b>${car.verifyBy||'-'}</b></td>
+        <td>วันที่ตรวจติดตาม: <b>${car.verifyDate||'-'}</b></td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="background:#1e293b;color:#fff;font-weight:700;padding:4px 8px;margin-bottom:0">การรับรองมาตรการหาสาเหตุ แก้ไข และป้องกัน</div>
+  <div style="border:1px solid #000;border-top:none;padding:6px 8px;margin-bottom:6px">
+    <table style="width:100%;font-size:11px">
+      <tr>
+        <td style="width:60%">${chk(step4Done&&car.closeType==='accept')} ยอมรับการแก้ไข และปิด CAR/PAR</td>
+        <td>QMR: <b>${car.qmrName||'-'}</b></td>
+      </tr>
+      <tr>
+        <td>${chk(step4Done&&car.closeType==='reopen')} ไม่ยอมรับการแก้ไข และต้องตรวจติดตามผลครั้งที่ 2 เปิด CAR/PAR No. <b>${car.reopenNo||'___________'}</b></td>
+        <td>วันที่: <b>${car.closeApproveDate||'-'}</b></td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="text-align:right;font-size:9px;color:#888;margin-top:4px">FM-MR-06/01</div>
+</div>`;
+
+              // Render to off-screen div
+              const wrapper = document.createElement('div');
+              wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;background:#fff';
+              wrapper.innerHTML = html;
+              document.body.appendChild(wrapper);
+
+              // Wait for font
+              await new Promise(r => setTimeout(r, 600));
+
+              try {
+                const canvas = await html2canvas(wrapper.querySelector('#ncr-print'), {
+                  scale: 2, useCORS: true, backgroundColor: '#fff', logging: false
+                });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jspdf.jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+                const pW = pdf.internal.pageSize.getWidth();
+                const pH = pdf.internal.pageSize.getHeight();
+                const ratio = canvas.height / canvas.width;
+                const imgH = pW * ratio;
+                if (imgH <= pH) {
+                  pdf.addImage(imgData, 'PNG', 0, 0, pW, imgH);
+                } else {
+                  // Multi-page
+                  let y = 0;
+                  const pageH = canvas.width * (pH / pW);
+                  while (y < canvas.height) {
+                    const c2 = document.createElement('canvas');
+                    c2.width = canvas.width;
+                    c2.height = Math.min(pageH, canvas.height - y);
+                    c2.getContext('2d').drawImage(canvas, 0, y, canvas.width, c2.height, 0, 0, canvas.width, c2.height);
+                    if (y > 0) pdf.addPage();
+                    pdf.addImage(c2.toDataURL('image/png'), 'PNG', 0, 0, pW, c2.height * pW / canvas.width);
+                    y += pageH;
+                  }
+                }
+                pdf.save(`CAR_PAR_${dept}_${carNo}.pdf`);
+              } finally {
+                document.body.removeChild(wrapper);
+              }
             };
 
             return (
@@ -1711,7 +1775,7 @@ function App() {
                     <p className="text-xs text-slate-400 mt-0.5">FM-MR-06/01 | {dept} | {car.carNumber||car.id.slice(0,8).toUpperCase()}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={downloadNCR} className="bg-brand-600 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-brand-700 transition-all">
+                    <button onClick={async()=>{ showToast('⏳ กำลังสร้าง PDF...','info'); await downloadNCR(); }} className="bg-brand-600 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-brand-700 transition-all">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                       ดาวน์โหลด PDF
                     </button>
