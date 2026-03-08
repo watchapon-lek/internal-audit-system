@@ -674,7 +674,7 @@ function App() {
           id: carId, auditId: currentAudit.id, itemId: item.id,
           question: item.question,
           finding: item.comment || (isNC ? 'พบข้อบกพร่อง (Non-Compliant)' : 'ข้อสังเกตจากการตรวจ (Observation)'),
-          severity: isNC ? CARSeverity.MAJOR : CARSeverity.MINOR,
+          severity: isNC ? (item.severity === 'minor' ? CARSeverity.MINOR : CARSeverity.MAJOR) : CARSeverity.MINOR,
           issuedDate: new Date().toISOString(),
           dueDate: new Date(Date.now() + 7*86400000).toISOString(),
           status: CARStatus.OPEN,
@@ -694,9 +694,9 @@ function App() {
     const newAudits  = isEditing ? audits.map(a => a.id === finalAudit.id ? finalAudit : a) : [finalAudit, ...audits];
     setAudits(newAudits);
     confetti({ particleCount:100, spread:70, origin:{ y:0.6 } });
-    showToast(isEditing ? '✅ แก้ไขรายงานเรียบร้อยแล้ว' : '✅ บันทึกรายงานเรียบร้อยแล้ว');
-    setView('dashboard');
-    setIsEditing(false);
+    const msg = isEditing ? '✅ แก้ไขรายงานเรียบร้อยแล้ว' : `✅ บันทึกสำเร็จ! พบ NC: ${generatedCars.filter(c=>c.severity===CARSeverity.MAJOR).length} | PAR: ${generatedCars.filter(c=>c.severity===CARSeverity.MINOR).length}`;
+    showToast(msg);
+    setTimeout(() => { setView('dashboard'); setIsEditing(false); }, 1800);
   };
 
   const deleteAudit = (id) => {
@@ -1268,6 +1268,31 @@ function App() {
                         </div>
                         )}
 
+                        {item.score === 'NC' && (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">ระดับความรุนแรง:</span>
+                          <div className="flex gap-3">
+                            {[{val:'major',label:'MAJOR',sub:'(ร้ายแรงมาก)',color:'rose'},{val:'minor',label:'MINOR',sub:'(ร้ายแรง)',color:'orange'}].map(lv=>(
+                              <button key={lv.val} onClick={()=>updateItem(item.id,{severity:lv.val})}
+                                className={cn("flex items-center gap-2 px-4 py-2 rounded-xl border-2 text-xs font-bold transition-all",
+                                  item.severity===lv.val
+                                    ? lv.color==='rose' ? "bg-rose-500 border-rose-500 text-white shadow-md scale-105"
+                                                        : "bg-orange-400 border-orange-400 text-white shadow-md scale-105"
+                                    : "bg-white border-slate-200 text-slate-400 hover:border-slate-300")}>
+                                <div className={cn("w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                                  item.severity===lv.val?"border-white":"border-current")}>
+                                  {item.severity===lv.val&&<div className="w-2 h-2 rounded-sm bg-white"/>}
+                                </div>
+                                <div className="text-left">
+                                  <div>{lv.label}</div>
+                                  <div className="font-normal opacity-80">{lv.sub}</div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        )}
+
                         <div className="flex flex-wrap items-center gap-6 py-2">
                           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">ข้อกำหนด:</span>
                           <div className="flex flex-wrap gap-4">
@@ -1657,7 +1682,7 @@ function App() {
                           <h4 className="font-bold text-slate-900">{car.question}</h4>
                           <div className="flex flex-wrap gap-x-4 gap-y-1">
                             <p className="text-xs text-slate-500">แผนก: {audits.find(a=>a.id===car.auditId)?.department}</p>
-                            {car.carNumber && <p className="text-xs font-bold text-rose-600">CAR No.: {car.carNumber}</p>}
+                            {car.carNumber && <p className="text-xs font-bold text-rose-600">{(car.prefix||'CAR')} No.: {car.carNumber}</p>}
                           </div>
                         </div>
                         <div className="text-right">
@@ -2465,7 +2490,7 @@ function App() {
                               <p className="text-xs text-slate-500">กำหนด: {new Date(car.dueDate).toLocaleDateString()}</p>
                             </div>
                             <p className="font-bold text-slate-800 text-sm">{car.question}</p>
-                            {car.carNumber && <p className="text-xs font-bold text-rose-600">CAR No.: {car.carNumber}</p>}
+                            {car.carNumber && <p className="text-xs font-bold text-rose-600">{(car.prefix||'CAR')} No.: {car.carNumber}</p>}
                             <p className="text-xs text-slate-500">ผู้รับผิดชอบ: {car.assignedTo}</p>
                             {car.rootCause && (
                               <div className="mt-2 p-3 bg-white rounded-xl border border-slate-200 space-y-1">
@@ -2719,9 +2744,11 @@ function App() {
       )}
       {toast && (
         <div className={cn("fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl text-white font-bold text-sm",
-          toast.type==='success'?"bg-emerald-500":"bg-rose-500")}>
+          toast.type==='success'?"bg-emerald-500":toast.type==='info'?"bg-sky-500":"bg-rose-500")}>
           {toast.type==='success'
             ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            : toast.type==='info'
+            ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
             : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>}
           {toast.msg}
         </div>
