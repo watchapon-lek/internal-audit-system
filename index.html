@@ -655,20 +655,26 @@ function App() {
     const isPass     = passPct >= 70;
 
     const generatedCars = [];
-    const existingCarCount = audits.reduce((acc, a) => acc + a.cars.length, 0);
-    let carSeq = existingCarCount;
+    const year = new Date().getFullYear().toString().slice(-2);
+    // แยก sequence ระหว่าง CAR (NC) และ PAR (OBS)
+    const existingNCCount  = audits.reduce((acc,a) => acc + a.cars.filter(c=>c.severity===CARSeverity.MAJOR).length, 0);
+    const existingOBSCount = audits.reduce((acc,a) => acc + a.cars.filter(c=>c.severity===CARSeverity.MINOR).length, 0);
+    let carSeq = existingNCCount;
+    let parSeq = existingOBSCount;
+
     const updatedItems  = currentAudit.items.map(item => {
       if (item.score === 'NC' || item.score === 'OBS') {
         const carId = uuid();
-        carSeq++;
-        const year = new Date().getFullYear().toString().slice(-2);
-        const typeCode = item.score === 'NC' ? 'NC' : 'OBS';
-        const autoCarNumber = `CAR-${year}-${typeCode}-${String(carSeq).padStart(3,'0')}`;
+        const isNC = item.score === 'NC';
+        if (isNC) carSeq++; else parSeq++;
+        const seq = isNC ? carSeq : parSeq;
+        const prefix = isNC ? 'CAR' : 'PAR';
+        const autoCarNumber = `${prefix}-${year}-${String(seq).padStart(3,'0')}`;
         generatedCars.push({
           id: carId, auditId: currentAudit.id, itemId: item.id,
           question: item.question,
-          finding: item.comment || (item.score === 'NC' ? 'พบข้อบกพร่อง (Non-Compliant)' : 'ข้อสังเกตจากการตรวจ (Observation)'),
-          severity: item.score === 'NC' ? CARSeverity.MAJOR : CARSeverity.MINOR,
+          finding: item.comment || (isNC ? 'พบข้อบกพร่อง (Non-Compliant)' : 'ข้อสังเกตจากการตรวจ (Observation)'),
+          severity: isNC ? CARSeverity.MAJOR : CARSeverity.MINOR,
           issuedDate: new Date().toISOString(),
           dueDate: new Date(Date.now() + 7*86400000).toISOString(),
           status: CARStatus.OPEN,
@@ -676,9 +682,10 @@ function App() {
           assignedTo: 'หัวหน้าแผนก ' + currentAudit.department,
           carNumber: item.carNumber || autoCarNumber,
           carNumberBase: autoCarNumber,
-          seqNo: carSeq,
+          seqNo: seq,
+          prefix: prefix,
         });
-        return { ...item, carId };
+        return { ...item, carId, carNumber: item.carNumber || autoCarNumber };
       }
       return item;
     });
@@ -704,10 +711,10 @@ function App() {
       cars: audit.cars.map(car => {
         if (car.id !== carId) return car;
         const year = new Date().getFullYear().toString().slice(-2);
-        const typeCode = car.severity === CARSeverity.MAJOR ? 'NC' : 'OBS';
+        const prefix = car.prefix || (car.severity === CARSeverity.MAJOR ? 'CAR' : 'PAR');
         const statusCode = newStatus === CARStatus.CLOSED ? '-CLOSED' : newStatus === CARStatus.PENDING ? '-PENDING' : '';
         const seq = car.seqNo ? String(car.seqNo).padStart(3,'0') : car.carNumberBase?.split('-').pop() || '000';
-        const updatedCarNumber = `CAR-${year}-${typeCode}-${seq}${statusCode}`;
+        const updatedCarNumber = `${prefix}-${year}-${seq}${statusCode}`;
         return {
           ...car,
           status: newStatus,
@@ -973,7 +980,7 @@ function App() {
                     { label:'คะแนนเฉลี่ย', value:`${stats.avgScore}%`, color:'' },
                     { label:'C (ผ่าน)', value:stats.cCount, color:'text-sky-600' },
                     { label:'NC (ไม่ผ่าน)', value:stats.ncCount, color:'text-rose-600' },
-                    { label:'OBS (ข้อสังเกต)', value:stats.obs, color:'text-amber-500' },
+                    { label:'PAR (ข้อสังเกต)', value:stats.obs, color:'text-amber-500' },
                   ].map(s => (
                     <div key={s.label} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
                       <p className="text-slate-500 text-sm font-medium">{s.label}</p>
@@ -1223,23 +1230,41 @@ function App() {
                         <div className="flex flex-wrap items-center gap-3">
                           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">ผลการตรวจ:</span>
                           {['C','NC','OBS'].map(s => (
-                            <button key={s} onClick={()=>updateItem(item.id,{score:s})}
+                            <button key={s} onClick={()=>{
+                              const year = new Date().getFullYear().toString().slice(-2);
+                              if (s === 'NC' || s === 'OBS') {
+                                // คำนวณ seq จาก items ปัจจุบัน + existing
+                                const isNC = s === 'NC';
+                                const prefix = isNC ? 'CAR' : 'PAR';
+                                const existingCount = isNC
+                                  ? audits.reduce((acc,a)=>acc+a.cars.filter(c=>c.severity===CARSeverity.MAJOR).length,0)
+                                  : audits.reduce((acc,a)=>acc+a.cars.filter(c=>c.severity===CARSeverity.MINOR).length,0);
+                                const currentItemCount = (currentAudit?.items||[]).filter(i=>i.id!==item.id&&i.score===s).length;
+                                const seq = existingCount + currentItemCount + 1;
+                                const autoNo = `${prefix}-${year}-${String(seq).padStart(3,'0')}`;
+                                updateItem(item.id, { score:s, carNumber: item.carNumber || autoNo });
+                              } else {
+                                updateItem(item.id, { score:s, carNumber:'' });
+                              }
+                            }}
                               className={cn("px-6 py-2 rounded-xl font-black transition-all border-2",
                                 item.score===s
                                   ? s==='C' ? "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100 scale-105"
                                   : s==='NC' ? "bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-100 scale-105"
                                   : "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-100 scale-105"
                                   : "bg-white border-slate-100 text-slate-400 hover:border-slate-200")}>
-                              {s}
+                              {s === 'OBS' ? 'PAR' : s}
                             </button>
                           ))}
                         </div>
 
+                        {(item.score === 'NC' || item.score === 'OBS') && (
                         <div className="flex flex-wrap items-center gap-3">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">CAR No.:</span>
-                          <input type="text" placeholder="เลขที่ใบ CAR (ถ้ามี)" value={item.carNumber||''} onChange={e=>updateItem(item.id,{carNumber:e.target.value})}
-                            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-brand-500 w-full md:w-64" />
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">{item.score==='NC'?'CAR No.':'PAR No.'}:</span>
+                          <input type="text" placeholder={`เลขที่ใบ ${item.score==='NC'?'CAR':'PAR'} (อัตโนมัติ)`} value={item.carNumber||''} onChange={e=>updateItem(item.id,{carNumber:e.target.value})}
+                            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-1 focus:ring-brand-500 w-full md:w-64 font-bold text-rose-600" />
                         </div>
+                        )}
 
                         <div className="flex flex-wrap items-center gap-6 py-2">
                           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">ข้อกำหนด:</span>
