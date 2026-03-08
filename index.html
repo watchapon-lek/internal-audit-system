@@ -1233,7 +1233,6 @@ function App() {
                             <button key={s} onClick={()=>{
                               const year = new Date().getFullYear().toString().slice(-2);
                               if (s === 'NC' || s === 'OBS') {
-                                // คำนวณ seq จาก items ปัจจุบัน + existing
                                 const isNC = s === 'NC';
                                 const prefix = isNC ? 'CAR' : 'PAR';
                                 const existingCount = isNC
@@ -1242,7 +1241,8 @@ function App() {
                                 const currentItemCount = (currentAudit?.items||[]).filter(i=>i.id!==item.id&&i.score===s).length;
                                 const seq = existingCount + currentItemCount + 1;
                                 const autoNo = `${prefix}-${year}-${String(seq).padStart(3,'0')}`;
-                                updateItem(item.id, { score:s, carNumber: item.carNumber || autoNo });
+                                // รัน autoNo ใหม่ทุกครั้งที่เปลี่ยน score (ไม่ใช้เลขเก่า)
+                                updateItem(item.id, { score:s, carNumber: autoNo });
                               } else {
                                 updateItem(item.id, { score:s, carNumber:'' });
                               }
