@@ -598,20 +598,10 @@ function App() {
     return () => window.removeEventListener('firebaseReady', handler);
   }, []);
 
-  // Persist helpers — เขียนลง Firestore (ใช้ id เป็น document key)
-  const setAudits = (v) => {
-    const arr = Array.isArray(v) ? v : [v];
-    // diff: save only changed/new docs
-    arr.forEach(a => { if(a?.id) fsSet('audits', a.id, a); });
-  };
-  const setPlans = (v) => {
-    const arr = Array.isArray(v) ? v : [v];
-    arr.forEach(p => { if(p?.id) fsSet('plans', p.id, p); });
-  };
-  const setAuditors = (v) => {
-    const arr = Array.isArray(v) ? v : [v];
-    arr.forEach(a => { if(a?.id) fsSet('auditors', a.id, a); });
-  };
+  // Persist helpers — เขียนลง Firestore เฉพาะ doc เดียว (ไม่รับ array)
+  const setAudits   = (audit) => { if(audit?.id) fsSet('audits',   audit.id,   audit); };
+  const setPlans    = (plan)  => { if(plan?.id)  fsSet('plans',    plan.id,    plan);  };
+  const setAuditors = (aud)   => { if(aud?.id)   fsSet('auditors', aud.id,     aud);   };
   const deleteAuditDoc  = (id) => fsDel('audits', id);
   const deletePlanDoc   = (id) => fsDel('plans', id);
   const deleteAuditorDoc= (id) => fsDel('auditors', id);
@@ -1737,7 +1727,7 @@ function App() {
                               <div className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 flex items-center gap-2">
                                 <img src={auditor.signature} alt="sig" className="h-8 w-auto max-w-[100px] object-contain" />
                               </div>
-                              <button onClick={()=>setAuditors(auditors.map(a=>a.id===auditor.id?{...a,signature:''}:a))}
+                              <button onClick={()=>setAuditors({...auditor,signature:''})}
                                 className="text-xs text-rose-500 hover:text-rose-700 font-medium transition-colors">ลบลายเซ็น</button>
                             </div>
                           ) : (
@@ -1746,7 +1736,7 @@ function App() {
                               อัปโหลดลายเซ็น
                               <input type="file" accept="image/*" className="hidden" onChange={e=>{
                                 const f=e.target.files?.[0]; if(!f) return;
-                                const r=new FileReader(); r.onloadend=()=>setAuditors(auditors.map(a=>a.id===auditor.id?{...a,signature:r.result}:a)); r.readAsDataURL(f);
+                                const r=new FileReader(); r.onloadend=()=>setAuditors({...auditor,signature:r.result}); r.readAsDataURL(f);
                               }} />
                             </label>
                           )}
