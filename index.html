@@ -539,7 +539,7 @@ function QRCode({ value, size = 120 }) {
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 function App() {
-  const [theme, setTheme]         = useState(() => ls.get('audit-theme', 'indigo'));
+  const [theme, setTheme]         = useState('indigo');
   const [view,  setView]          = useState('dashboard');
   const [isEditing, setIsEditing] = useState(false);
   const [audits,   setAuditsRaw]  = useState([]);
@@ -567,7 +567,7 @@ function App() {
   const [newPlanDate, setNewPlanDate]   = useState('');
   const [newPlanAuditorIds, setNewPlanAuditorIds] = useState([]);
   const [newPlanRound,  setNewPlanRound]  = useState(1);
-  const [adminEmail, setAdminEmail]      = useState(() => ls.get('audit-admin-email','admin@example.com'));
+  const [adminEmail, setAdminEmail]      = useState('admin@example.com');
   const [responseDept, setResponseDept]  = useState(null);
   const [urlCars, setUrlCars] = useState([]);
   const [respondingCar, setRespondingCar] = useState(null);
@@ -582,8 +582,15 @@ function App() {
       const u1 = fsListen('audits',   docs => setAuditsRaw(docs));
       const u2 = fsListen('plans',    docs => setPlansRaw(docs));
       const u3 = fsListen('auditors', docs => setAuditorsRaw(docs));
+      const u4 = fsListen('settings', docs => {
+        const s = docs.find(d => d._fsId === 'main' || d.id === 'main');
+        if (s) {
+          if (s.theme) setTheme(prev => prev !== s.theme ? s.theme : prev);
+          if (s.adminEmail) setAdminEmail(prev => prev !== s.adminEmail ? s.adminEmail : prev);
+        }
+      });
       setDbReady(true);
-      return () => { u1?.(); u2?.(); u3?.(); };
+      return () => { u1?.(); u2?.(); u3?.(); u4?.(); };
     };
     if (window.__firebaseReady) { const unsub = init(); return unsub; }
     const handler = () => { const unsub = init(); window.removeEventListener('firebaseReady', handler); return unsub; };
@@ -613,7 +620,6 @@ function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme === 'indigo' ? '' : theme);
-    ls.set('audit-theme', theme);
   }, [theme]);
 
   useEffect(() => {
@@ -629,9 +635,10 @@ function App() {
     }
   }, []);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e?.preventDefault();
-    const storedPin = ls.get('audit-pin', '123456');
+    const settings = await window.fsGetDoc?.('settings', 'main');
+    const storedPin = settings?.pin || '123456';
     if (pinInput === storedPin) {
       setIsAuthenticated(true);
       sessionStorage.setItem('audit-auth','true');
@@ -648,9 +655,14 @@ function App() {
     setView('dashboard');
   };
 
-  const updateSecuritySettings = ({ pin, adminEmail: email }) => {
-    if (pin) { ls.set('audit-pin', pin); alert('เปลี่ยน PIN เรียบร้อยแล้ว'); }
-    if (email) { ls.set('audit-admin-email', email); setAdminEmail(email); alert('บันทึกอีเมลเรียบร้อยแล้ว'); }
+  const updateSecuritySettings = async ({ pin, adminEmail: email }) => {
+    const current = await window.fsGetDoc?.('settings','main') || {};
+    const updates = { ...current };
+    if (pin) { updates.pin = pin; }
+    if (email) { updates.adminEmail = email; setAdminEmail(email); }
+    await fsSet('settings', 'main', updates);
+    if (pin) alert('เปลี่ยน PIN เรียบร้อยแล้ว');
+    if (email) alert('บันทึกอีเมลเรียบร้อยแล้ว');
   };
 
   const addAuditor    = (name) => { if (!name.trim()) return; const a={id:uuid(),name:name.trim()}; fsSet('auditors',a.id,a); };
@@ -1658,7 +1670,7 @@ function App() {
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {THEMES.map(t => (
-                      <button key={t.id} onClick={()=>setTheme(t.id)}
+                      <button key={t.id} onClick={()=>{setTheme(t.id); fsSet('settings','main',{theme:t.id});}}
                         className={cn("flex items-center gap-3 p-4 rounded-2xl border-2 transition-all", theme===t.id?"border-brand-500 bg-brand-50 text-brand-700":"border-slate-100 bg-white text-slate-600 hover:border-slate-200")}>
                         <div className="w-6 h-6 rounded-full shadow-inner" style={{ backgroundColor:t.color }} />
                         <span className="font-bold text-sm">{t.name}</span>
