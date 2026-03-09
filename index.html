@@ -132,9 +132,9 @@ const uuid = () => crypto.randomUUID();
 const cn = (...c) => c.filter(Boolean).join(' ');
 const ls = { get: (k,d) => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):d; } catch { return d; }}, set: (k,v) => localStorage.setItem(k, JSON.stringify(v)) };
 // Firestore write helpers (window.fsSet/fsDel/fsListen set by module script above)
-const fsSet    = (...a) => window.fsSet?.(...a);
-const fsDel    = (...a) => window.fsDel?.(...a);
-const fsListen = (...a) => window.fsListen?.(...a);
+const fsSet    = (col, id, data) => window.fsSet?.(col, id, data);
+const fsDel    = (col, id) => window.fsDel?.(col, id);
+const fsListen = (col, cb) => window.fsListen?.(col, cb);
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const THEMES = [
