@@ -577,25 +577,46 @@ function App() {
 
   // ── Firestore realtime listeners ──────────────────────────────────────────
   useEffect(() => {
-    const init = () => {
+    let unsubscribers = [];
+    let cancelled = false;
+
+    function startListeners() {
+      if (cancelled) return;
       if (!window.fsListen) return;
-      const u1 = fsListen('audits',   docs => setAuditsRaw(docs));
-      const u2 = fsListen('plans',    docs => setPlansRaw(docs));
-      const u3 = fsListen('auditors', docs => setAuditorsRaw(docs));
-      const u4 = fsListen('settings', docs => {
-        const s = docs.find(d => d._fsId === 'main' || d.id === 'main');
+      const u1 = window.fsListen('audits',   function(docs){ setAuditsRaw(docs); });
+      const u2 = window.fsListen('plans',    function(docs){ setPlansRaw(docs); });
+      const u3 = window.fsListen('auditors', function(docs){ setAuditorsRaw(docs); });
+      const u4 = window.fsListen('settings', function(docs){
+        var s = null;
+        for (var i=0; i<docs.length; i++) { if (docs[i]._fsId === 'main') { s = docs[i]; break; } }
         if (s) {
-          if (s.theme) setTheme(prev => prev !== s.theme ? s.theme : prev);
-          if (s.adminEmail) setAdminEmail(prev => prev !== s.adminEmail ? s.adminEmail : prev);
+          if (s.theme) setTheme(function(prev){ return prev !== s.theme ? s.theme : prev; });
+          if (s.adminEmail) setAdminEmail(function(prev){ return prev !== s.adminEmail ? s.adminEmail : prev; });
         }
       });
+      if (u1) unsubscribers.push(u1);
+      if (u2) unsubscribers.push(u2);
+      if (u3) unsubscribers.push(u3);
+      if (u4) unsubscribers.push(u4);
       setDbReady(true);
-      return () => { if(u1) u1(); if(u2) u2(); if(u3) u3(); if(u4) u4(); };
+    }
+
+    function onFirebaseReady() {
+      window.removeEventListener('firebaseReady', onFirebaseReady);
+      startListeners();
+    }
+
+    if (window.__firebaseReady && window.fsListen) {
+      startListeners();
+    } else {
+      window.addEventListener('firebaseReady', onFirebaseReady);
+    }
+
+    return function cleanup() {
+      cancelled = true;
+      window.removeEventListener('firebaseReady', onFirebaseReady);
+      for (var i=0; i<unsubscribers.length; i++) { unsubscribers[i](); }
     };
-    if (window.__firebaseReady) { const unsub = init(); return unsub; }
-    const handler = () => { const unsub = init(); window.removeEventListener('firebaseReady', handler); return unsub; };
-    window.addEventListener('firebaseReady', handler);
-    return () => window.removeEventListener('firebaseReady', handler);
   }, []);
 
   // Persist helpers — เขียนลง Firestore เฉพาะ doc เดียว (ไม่รับ array)
